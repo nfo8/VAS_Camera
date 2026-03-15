@@ -1,0 +1,2391 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>VAS概算見積ツール V2.0</title>
+    <style>
+        :root {
+            --primary: #1e40af;
+            --primary-light: #3b82f6;
+            --primary-hover: #1d3a9e;
+            --accent: #0ea5e9;
+            --danger: #dc2626;
+            --danger-hover: #b91c1c;
+            --success: #059669;
+            --warning: #d97706;
+            --bg-canvas: #dde3ec;
+            --bg-dots: #c4cdd9;
+            --sidebar-bg: rgba(255,255,255,0.96);
+            --sidebar-border: rgba(30,64,175,0.12);
+            --panel-shadow: 0 4px 24px rgba(15,30,80,0.13);
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --text-muted: #94a3b8;
+            --border-light: #e2e8f0;
+            --sidebar-width: 320px;
+            --header-height: 64px;
+            --tabs-height: 52px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', 'Yu Gothic UI', system-ui, sans-serif;
+            background: var(--bg-canvas);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* ドットグリッドキャンバス背景 */
+        #workspace {
+            position: absolute;
+            inset: 0;
+            background-color: var(--bg-canvas);
+            background-image: radial-gradient(var(--bg-dots) 1px, transparent 0);
+            background-size: 22px 22px;
+            z-index: 1;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0; left: 0;
+        }
+
+        /* =========================================
+           共通パネル
+        ========================================= */
+        .panel {
+            background: var(--sidebar-bg);
+            border: 1px solid var(--sidebar-border);
+            border-radius: 14px;
+            box-shadow: var(--panel-shadow);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+        }
+
+        /* =========================================
+           トップヘッダー
+        ========================================= */
+        .top-bar {
+            position: fixed;
+            top: 12px;
+            left: calc(var(--sidebar-width) + 20px);
+            right: calc(var(--sidebar-width) + 20px);
+            height: var(--header-height);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 0 20px;
+            z-index: 95;
+        }
+
+        .app-branding {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+
+        .app-logo {
+            width: 36px; height: 36px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px; color: white;
+            box-shadow: 0 2px 8px rgba(30,64,175,0.3);
+        }
+
+        .app-title-wrap { display: flex; flex-direction: column; }
+
+        .app-name {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: 0.02em;
+        }
+
+        .app-version {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            font-weight: 500;
+            letter-spacing: 0.05em;
+        }
+
+        /* モードインジケーター */
+        .mode-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            background: rgba(30,64,175,0.06);
+            border: 1px solid rgba(30,64,175,0.15);
+            border-radius: 20px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--primary);
+            min-width: 140px;
+            justify-content: center;
+        }
+
+        .mode-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--primary-light);
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .mode-indicator.mode-add .mode-dot { background: var(--success); }
+        .mode-indicator.mode-add { color: var(--success); border-color: rgba(5,150,105,0.2); background: rgba(5,150,105,0.06); }
+
+        .mode-indicator.mode-line .mode-dot { background: var(--accent); }
+        .mode-indicator.mode-line { color: #0369a1; border-color: rgba(14,165,233,0.2); background: rgba(14,165,233,0.06); }
+
+        .mode-indicator.mode-scale .mode-dot { background: var(--warning); animation: pulse-dot 0.8s ease-in-out infinite; }
+        .mode-indicator.mode-scale { color: var(--warning); border-color: rgba(217,119,6,0.2); background: rgba(217,119,6,0.06); }
+
+        /* アクションボタングループ */
+        .top-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+        /* ページタブバー */
+        .page-tabs-bar {
+            position: fixed;
+            top: calc(12px + var(--header-height) + 8px);
+            left: calc(var(--sidebar-width) + 20px);
+            right: calc(var(--sidebar-width) + 20px);
+            height: var(--tabs-height);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 14px;
+            z-index: 90;
+            overflow-x: auto;
+        }
+
+        .page-tabs-bar::-webkit-scrollbar { height: 3px; }
+        .page-tabs-bar::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
+
+        #page-tabs-list { display: flex; gap: 6px; }
+
+        .page-tab {
+            padding: 6px 16px;
+            background: rgba(255,255,255,0.7);
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            transition: all 0.18s;
+            white-space: nowrap;
+            display: flex; align-items: center; gap: 6px;
+        }
+
+        .page-tab:hover { background: white; color: var(--text-primary); border-color: #c4cedb; }
+
+        .page-tab.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary-hover);
+            box-shadow: 0 2px 8px rgba(30,64,175,0.25);
+        }
+
+        .page-tab-del {
+            width: 15px; height: 15px;
+            border-radius: 50%;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 10px;
+            background: rgba(0,0,0,0.1);
+            cursor: pointer; transition: all 0.15s;
+            line-height: 1;
+        }
+
+        .page-tab.active .page-tab-del { background: rgba(255,255,255,0.25); }
+        .page-tab-del:hover { background: var(--danger) !important; color: white; }
+
+        /* =========================================
+           ボタン
+        ========================================= */
+        .btn {
+            border: none;
+            padding: 7px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 600;
+            transition: all 0.18s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            white-space: nowrap;
+            line-height: 1.2;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 1px 4px rgba(30,64,175,0.2);
+        }
+        .btn-primary:hover { background: var(--primary-hover); box-shadow: 0 2px 8px rgba(30,64,175,0.35); transform: translateY(-1px); }
+        .btn-primary:active { transform: translateY(0); }
+
+        .btn-outline {
+            background: white;
+            border: 1px solid var(--border-light);
+            color: var(--text-secondary);
+        }
+        .btn-outline:hover { border-color: #b0bec8; color: var(--text-primary); background: #f8fafc; }
+
+        .btn-outline.active {
+            background: rgba(14,165,233,0.08);
+            border-color: var(--accent);
+            color: #0369a1;
+        }
+
+        .btn-danger {
+            background: white;
+            border: 1px solid #fca5a5;
+            color: var(--danger);
+        }
+        .btn-danger:hover { background: var(--danger); color: white; border-color: var(--danger); }
+
+        .btn-success-soft {
+            background: rgba(5,150,105,0.08);
+            border: 1px solid rgba(5,150,105,0.25);
+            color: var(--success);
+        }
+        .btn-success-soft:hover { background: var(--success); color: white; }
+
+        .btn-icon {
+            padding: 7px 9px;
+            background: white;
+            border: 1px solid var(--border-light);
+            color: var(--text-secondary);
+            font-size: 14px;
+            min-width: 34px;
+        }
+        .btn-icon:hover { background: #f1f5f9; color: var(--text-primary); border-color: #b0bec8; }
+
+        /* =========================================
+           サイドバー共通
+        ========================================= */
+        .left-sidebar {
+            position: fixed;
+            top: 12px; left: 12px; bottom: 12px;
+            width: var(--sidebar-width);
+            display: flex; flex-direction: column;
+            gap: 0;
+            z-index: 100;
+            overflow: hidden;
+        }
+
+        .right-sidebar {
+            position: fixed;
+            top: 12px; right: 12px; bottom: 12px;
+            width: var(--sidebar-width);
+            z-index: 100;
+            display: flex; flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* =========================================
+           左サイドバー内部
+        ========================================= */
+        .sidebar-scroll {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 16px;
+            display: flex; flex-direction: column; gap: 18px;
+        }
+
+        .sidebar-scroll::-webkit-scrollbar { width: 4px; }
+        .sidebar-scroll::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
+
+        .section-header {
+            display: flex; align-items: center; gap: 7px;
+            font-size: 0.78rem; font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-light);
+            margin-bottom: 10px;
+        }
+
+        .section-header-icon {
+            width: 20px; height: 20px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+            border-radius: 5px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; color: white;
+        }
+
+        /* 機器グリッド */
+        .item-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .item-card {
+            padding: 10px 6px;
+            border: 1.5px solid var(--border-light);
+            border-radius: 10px;
+            text-align: center;
+            cursor: pointer;
+            background: white;
+            transition: all 0.18s;
+            display: flex; flex-direction: column; align-items: center; gap: 5px;
+        }
+
+        .item-card:hover {
+            border-color: var(--primary-light);
+            background: #eff6ff;
+            transform: translateY(-2px);
+            box-shadow: 0 3px 10px rgba(30,64,175,0.1);
+        }
+
+        .item-card.selected {
+            border-color: var(--primary);
+            border-width: 2px;
+            background: #eff6ff;
+            box-shadow: 0 0 0 3px rgba(30,64,175,0.12);
+        }
+
+        .item-swatch {
+            width: 22px; height: 22px;
+            border-radius: 50%;
+            border: 2.5px solid white;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+        }
+
+        .item-name { font-size: 0.72rem; font-weight: 700; color: var(--text-primary); line-height: 1.2; }
+        .item-price { font-size: 0.68rem; color: var(--text-muted); }
+
+        /* =========================================
+           プロパティパネル
+        ========================================= */
+        #property-panel {
+            display: none;
+            flex-direction: column; gap: 10px;
+            padding: 14px;
+            background: #f0f7ff;
+            border: 1.5px solid rgba(30,64,175,0.2);
+            border-radius: 10px;
+        }
+
+        .prop-title {
+            font-size: 0.78rem; font-weight: 700;
+            color: var(--primary); display: flex; align-items: center; gap: 6px;
+        }
+
+        .prop-title::before {
+            content: '';
+            display: block; width: 3px; height: 14px;
+            background: var(--primary); border-radius: 2px;
+        }
+
+        /* =========================================
+           右サイドバー内部
+        ========================================= */
+        .right-sidebar-header {
+            padding: 14px 16px 10px;
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        .right-sidebar-content {
+            flex: 1; overflow-y: auto;
+            padding: 16px;
+            display: flex; flex-direction: column; gap: 18px;
+        }
+
+        .right-sidebar-content::-webkit-scrollbar { width: 4px; }
+        .right-sidebar-content::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
+
+        /* フォーム */
+        .input-label {
+            font-size: 0.75rem; font-weight: 600;
+            color: var(--text-secondary); display: block; margin-bottom: 5px;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 9px 12px;
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            font-size: 0.85rem;
+            background: white;
+            color: var(--text-primary);
+            transition: all 0.18s;
+            font-family: inherit;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary-light);
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
+        }
+
+        /* アップロードボタン */
+        .upload-btn {
+            width: 100%;
+            padding: 12px;
+            border: 2px dashed #cbd5e1;
+            border-radius: 10px;
+            background: white;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.18s;
+            text-align: center;
+            font-family: inherit;
+        }
+
+        .upload-btn:hover {
+            border-color: var(--primary-light);
+            color: var(--primary);
+            background: #eff6ff;
+        }
+
+        /* インフォボックス */
+        .info-box {
+            padding: 10px 12px;
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            color: #0369a1;
+            display: flex; gap: 7px; align-items: flex-start;
+            line-height: 1.5;
+        }
+
+        .warn-box {
+            padding: 12px 14px;
+            background: #fffbeb;
+            border: 1px solid #fcd34d;
+            border-radius: 10px;
+            color: #92400e;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-align: center;
+            line-height: 1.5;
+        }
+
+        /* =========================================
+           統計カード
+        ========================================= */
+        .stats-grid { display: flex; flex-direction: column; gap: 8px; }
+
+        .stat-card {
+            background: white;
+            padding: 11px 14px;
+            border-radius: 10px;
+            display: flex; justify-content: space-between; align-items: center;
+            border: 1px solid var(--border-light);
+        }
+
+        .stat-card.total {
+            background: linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%);
+            color: white; border: none;
+            box-shadow: 0 4px 14px rgba(30,64,175,0.3);
+        }
+
+        .stat-label { font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); }
+        .stat-card.total .stat-label { color: rgba(255,255,255,0.8); }
+
+        .stat-value { font-size: 1.05rem; font-weight: 800; color: var(--text-primary); }
+        .stat-card.total .stat-value { font-size: 1.35rem; color: white; }
+
+        /* =========================================
+           スケールステータス
+        ========================================= */
+        .scale-status-badge {
+            display: none;
+            align-items: center; gap: 6px;
+            padding: 5px 10px;
+            background: #ecfdf5;
+            border: 1px solid #6ee7b7;
+            border-radius: 6px;
+            font-size: 0.75rem; font-weight: 600; color: var(--success);
+            margin-top: 6px;
+        }
+
+        /* =========================================
+           トースト通知
+        ========================================= */
+        #toast-container {
+            position: fixed;
+            bottom: 24px; left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            display: flex; flex-direction: column; gap: 8px;
+            pointer-events: none;
+        }
+
+        .toast {
+            padding: 10px 22px;
+            border-radius: 24px;
+            color: white;
+            font-size: 0.85rem; font-weight: 600;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            animation: toastIn 0.35s cubic-bezier(0.22,1,0.36,1) forwards;
+            white-space: nowrap;
+        }
+
+        .toast.success { background: rgba(5,150,105,0.93); }
+        .toast.info    { background: rgba(30,64,175,0.93); }
+        .toast.warning { background: rgba(217,119,6,0.93); }
+        .toast.error   { background: rgba(220,38,38,0.93); }
+
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateY(16px) scale(0.92); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes toastOut {
+            from { opacity: 1; transform: translateY(0) scale(1); }
+            to   { opacity: 0; transform: translateY(-12px) scale(0.92); }
+        }
+
+        /* =========================================
+           モーダル
+        ========================================= */
+        .modal-overlay {
+            position: fixed; inset: 0;
+            background: rgba(15,23,42,0.55);
+            display: none;
+            justify-content: center; align-items: center;
+            z-index: 1000;
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-box {
+            background: white;
+            border-radius: 16px;
+            width: 92%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 24px 60px rgba(0,0,0,0.25);
+            animation: modalIn 0.25s cubic-bezier(0.22,1,0.36,1);
+        }
+
+        @keyframes modalIn {
+            from { opacity: 0; transform: scale(0.94) translateY(16px); }
+            to   { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        .modal-header {
+            padding: 20px 24px 16px;
+            border-bottom: 1px solid var(--border-light);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+
+        .modal-title {
+            font-size: 1.05rem; font-weight: 700;
+            color: var(--text-primary); display: flex; align-items: center; gap: 8px;
+        }
+
+        .modal-close {
+            width: 30px; height: 30px;
+            border-radius: 8px; border: none;
+            background: var(--border-light); color: var(--text-secondary);
+            cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;
+            transition: all 0.15s;
+        }
+        .modal-close:hover { background: #e2e8f0; color: var(--text-primary); }
+
+        .modal-body { padding: 20px 24px; }
+        .modal-footer {
+            padding: 14px 24px;
+            border-top: 1px solid var(--border-light);
+            display: flex; gap: 10px; justify-content: flex-end;
+        }
+
+        /* 設定モーダル内グリッド */
+        .settings-section-title {
+            font-size: 0.8rem; font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase; letter-spacing: 0.06em;
+            padding: 12px 0 8px;
+            border-bottom: 1px solid var(--border-light);
+            margin-bottom: 12px;
+        }
+
+        .settings-row {
+            display: flex; gap: 8px; margin-bottom: 8px; align-items: flex-end;
+        }
+
+        .settings-row .input-group { flex: 1; }
+
+        .input-group { display: flex; flex-direction: column; gap: 4px; }
+
+        /* =========================================
+           印刷スタイル
+        ========================================= */
+        #print-summary { display: none; }
+        #print-dynamic-container { display: none; }
+
+        @media print {
+            body { display: block !important; padding: 0 !important; margin: 0 !important; background: white !important; }
+            body > *:not(#print-dynamic-container) { display: none !important; }
+
+            #print-dynamic-container {
+                display: block !important; width: 100% !important;
+            }
+
+            #print-dynamic-container * { color: black !important; }
+
+            .print-page {
+                page-break-after: always !important;
+                width: 100% !important;
+                padding: 14mm 18mm !important;
+                box-sizing: border-box !important;
+            }
+
+            .print-page:last-child { page-break-after: auto !important; }
+
+            .print-canvas-img {
+                width: 100% !important; height: auto !important;
+                max-height: 62vh !important; object-fit: contain !important;
+                border-bottom: 2px solid #334155 !important; margin-bottom: 14px !important;
+                display: block !important;
+            }
+
+            /* 概算/明細なしで図面のみのページは、より大きく表示 */
+            .print-page.floor-only .print-canvas-img {
+                max-height: 82vh !important;
+            }
+
+            #print-summary { display: none !important; }
+
+            .print-summary-template {
+                display: block !important; visibility: visible !important;
+                background: white !important; border: none !important; padding: 0 !important;
+                width: 100% !important; box-sizing: border-box !important;
+                font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif !important;
+            }
+
+            .print-table {
+                width: 100% !important; border-collapse: collapse !important;
+                margin-top: 14px !important;
+            }
+
+            .print-table th, .print-table td {
+                border: 1px solid #cbd5e1 !important;
+                padding: 10px 14px !important; font-size: 13px !important;
+                color: #1e293b !important;
+            }
+
+            .print-table th {
+                background-color: #f1f5f9 !important; font-weight: 700 !important;
+                text-align: left !important; width: 38% !important;
+            }
+
+            .print-table td { text-align: right !important; }
+
+            .print-table tr.total-row th,
+            .print-table tr.total-row td {
+                background-color: #1e3a8a !important; color: white !important;
+                font-size: 16px !important; font-weight: 700 !important;
+                border-color: #1e3a8a !important;
+            }
+
+            .print-summary-template h3 {
+                font-size: 22px !important; margin: 8px 0 !important;
+                color: #1e3a8a !important; border-bottom: 3px solid #1e3a8a !important;
+                padding-bottom: 6px !important; text-align: center !important; letter-spacing: 2px !important;
+            }
+
+            .print-summary-template .print-subtitle {
+                font-size: 12px !important; color: #475569 !important;
+                margin-bottom: 16px !important; text-align: right !important; font-weight: 600 !important;
+            }
+
+            #print-header {
+                display: block !important; visibility: visible !important;
+                color: #0f172a !important; font-size: 26px !important; font-weight: 800 !important;
+                text-align: center !important; margin-bottom: 18px !important;
+                border-bottom: 3px solid #1e3a8a !important; padding-bottom: 12px !important;
+                letter-spacing: 3px !important;
+                font-family: "Helvetica Neue", Arial, sans-serif !important;
+            }
+
+            @page { size: A4 portrait; margin: 0mm; }
+        }
+
+        /* =========================================
+           レスポンシブ
+        ========================================= */
+        @media (max-width: 1400px) {
+            :root { --sidebar-width: 280px; }
+        }
+        @media (max-width: 1100px) {
+            :root { --sidebar-width: 250px; }
+            .app-name { font-size: 0.85rem; }
+            .btn { font-size: 0.75rem; padding: 6px 11px; }
+        }
+
+        /* アニメーション */
+        @keyframes fadeSlideIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+<!-- JS無効警告（JS起動後に消去） -->
+<div id="js-check-warning" style="background:#dc2626;color:white;padding:18px;text-align:center;font-weight:bold;z-index:99999;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;">
+    <div style="font-size:1.4rem;">⚠️ JavaScriptが実行されていません</div>
+    <div style="font-size:0.9rem;opacity:0.9;">iPadの「ファイル」アプリ等から直接開いた場合、Appleのセキュリティ制限によりアプリが動作しません。<br>Safariで開くか、「Documents by Readdle」等のブラウザ対応アプリをご利用ください。</div>
+</div>
+<script>document.getElementById('js-check-warning').style.display = 'none';</script>
+
+<!-- キャンバスワークスペース -->
+<div id="workspace"><canvas id="main-canvas"></canvas></div>
+
+<!-- 上部ヘッダー -->
+<header class="top-bar panel">
+    <div class="app-branding">
+        <div class="app-logo">📷</div>
+        <div class="app-title-wrap">
+            <span class="app-name">VAS 概算見積ツール</span>
+            <span class="app-version">N式 V2.0 &nbsp;|&nbsp; 社内用ローカルシステム</span>
+        </div>
+    </div>
+
+    <div id="mode-indicator" class="mode-indicator">
+        <span class="mode-dot"></span>
+        <span id="mode-label">選択モード</span>
+    </div>
+
+    <div class="top-actions">
+        <button class="btn btn-icon" id="btn-undo" title="元に戻す (Ctrl+Z)">↶</button>
+        <button class="btn btn-icon" id="btn-redo" title="やり直し (Ctrl+Y)">↷</button>
+        <button class="btn btn-icon" id="btn-reset-view" title="表示をリセット">⊙</button>
+        <button class="btn btn-outline" id="btn-select-line">✏️ 配線選択</button>
+        <button class="btn btn-outline" id="btn-help">❓ 使い方</button>
+        <button class="btn btn-outline" id="btn-settings">⚙️ 設定</button>
+        <button class="btn btn-outline" id="btn-load-project">📂 読込</button>
+        <input type="file" id="project-file-input" accept=".json" style="display:none;">
+        <button class="btn btn-primary" id="btn-save-project">💾 保存</button>
+    </div>
+</header>
+
+<!-- ページ（フロア）タブバー -->
+<div id="page-tabs-container" class="page-tabs-bar panel">
+    <div id="page-tabs-list"></div>
+    <button class="btn btn-primary" id="btn-add-page" style="padding:5px 12px;font-size:0.75rem;flex-shrink:0;">＋ フロア追加</button>
+    <button class="btn btn-danger" id="btn-delete-page" style="padding:5px 12px;font-size:0.75rem;flex-shrink:0;">🗑 削除</button>
+</div>
+
+<!-- 印刷テンプレート（非表示） -->
+<div id="print-summary" style="display:none;">
+    <div class="print-summary-template">
+        <h3>見積詳細</h3>
+        <div class="print-subtitle">作成日: <span class="pd-date"></span></div>
+        <table class="print-table">
+            <tbody>
+                <tr><th>案件名</th><td class="pd-pname" style="text-align:left!important;font-weight:bold!important;">未入力</td></tr>
+                <tr><th>機器台数（カメラ）</th><td class="pd-camera-count">0台</td></tr>
+                <tr><th>機器台数（周辺機器）</th><td class="pd-other-count">0台</td></tr>
+                <tr><th>総配線距離 <span style="font-size:11px;font-weight:normal;">(図面スケール換算)</span></th><td class="pd-lan-length">0.0m</td></tr>
+                <tr class="total-row"><th>概算金額 <span style="font-size:11px;font-weight:normal;">(税別)</span></th><td class="pd-total">¥50,000</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 左サイドバー -->
+<aside class="left-sidebar panel">
+    <div class="sidebar-scroll">
+
+        <!-- 機器リスト -->
+        <div>
+            <div class="section-header">
+                <div class="section-header-icon">📷</div>
+                機器リスト
+            </div>
+            <div class="item-grid" id="equipment-grid"></div>
+        </div>
+
+        <!-- 配線リスト -->
+        <div>
+            <div class="section-header">
+                <div class="section-header-icon">🔌</div>
+                配線リスト
+            </div>
+            <div class="item-grid" id="lan-grid"></div>
+        </div>
+
+        <!-- プロパティパネル -->
+        <div id="property-panel">
+            <div class="prop-title" id="prop-panel-title">機器プロパティ</div>
+            <div id="prop-obj-controls">
+                <div class="input-group" style="margin-bottom:8px;">
+                    <label class="input-label">サイズ倍率</label>
+                    <input type="range" id="prop-size" min="0.5" max="3" step="0.1" value="1" class="form-control" style="padding:0;height:4px;accent-color:var(--primary);">
+                </div>
+                <div class="input-group" id="prop-fov-group" style="margin-bottom:8px;">
+                    <label class="input-label">視野角 (度)</label>
+                    <input type="number" id="prop-fov" min="10" max="360" value="60" class="form-control">
+                </div>
+                <div class="input-group" style="margin-bottom:8px;">
+                    <label class="input-label">回転角度</label>
+                    <input type="range" id="prop-rot" min="-180" max="180" value="0" class="form-control" style="padding:0;height:4px;accent-color:var(--primary);">
+                </div>
+            </div>
+            <button class="btn btn-danger" id="btn-delete-obj" style="width:100%;margin-top:4px;">🗑 削除 (Delete)</button>
+        </div>
+
+        <!-- 操作ガイド -->
+        <div class="info-box" style="font-size:0.72rem;">
+            <span>💡</span>
+            <span>機器はドラッグで移動。選択後、<b>青ハンドル</b>で回転・<b>緑ハンドル</b>で視野角を調整。配線はタップで頂点追加、ダブルタップ/右クリックで確定。<br><b>Del</b>=削除　<b>Esc</b>=選択解除</span>
+        </div>
+    </div>
+</aside>
+
+<!-- 右サイドバー -->
+<aside class="right-sidebar panel">
+    <div class="right-sidebar-header">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.06em;">プロジェクト設定 &amp; 概算</div>
+    </div>
+    <div class="right-sidebar-content">
+
+        <!-- 案件名 -->
+        <div class="input-group">
+            <label class="input-label">📋 案件名</label>
+            <input type="text" id="project-name" class="form-control" placeholder="例: ○○ビル セキュリティ構築">
+        </div>
+
+        <!-- 図面アップロード -->
+        <div>
+            <div class="section-header">
+                <div class="section-header-icon">🖼</div>
+                図面アップロード
+            </div>
+            <button class="upload-btn" id="img-upload-zone">🖼️ 図面を選択 / 📷 iPadで撮影</button>
+            <input type="file" id="file-input" accept="image/*" capture="environment" style="display:none;">
+        </div>
+
+        <!-- スケール設定 -->
+        <div>
+            <div class="section-header">
+                <div class="section-header-icon">📏</div>
+                縮尺（スケール）設定
+            </div>
+            <div id="scale-info-hint" class="info-box" style="margin-bottom:8px;">
+                <span>💡</span>
+                <span>図面上の既知の2点をクリックし、実際の距離(m)を入力してスケールを設定します。</span>
+            </div>
+            <button class="btn btn-outline" id="btn-set-scale" style="width:100%;">📐 縮尺を設定する</button>
+            <div id="scale-status" class="scale-status-badge">
+                ✅ 縮尺設定済: <span id="scale-value-display">-</span>
+            </div>
+        </div>
+
+        <!-- リアルタイム概算 -->
+        <div id="estimate-section" style="display:none;">
+            <div class="section-header">
+                <div class="section-header-icon">📊</div>
+                リアルタイム概算
+            </div>
+            <div class="stats-grid" id="estimate-content">
+                <div class="stat-card" id="card-base-fee">
+                    <span class="stat-label">システム基本料金</span>
+                    <span class="stat-value" id="stat-base-fee">¥50,000</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">機器合計 (<span id="stat-obj-count">0</span>台)</span>
+                    <span class="stat-value" id="stat-obj-fee">¥0</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">配線合計 (<span id="stat-lan-length">0.0</span>m)</span>
+                    <span class="stat-value" id="stat-lan-fee">¥0</span>
+                </div>
+                <div class="stat-card total">
+                    <span class="stat-label">総合計（税抜）</span>
+                    <span class="stat-value" id="stat-total-fee">¥50,000</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 出力 -->
+        <div id="export-section" style="display:none;">
+            <div class="section-header">
+                <div class="section-header-icon">🖨</div>
+                出力・エクスポート
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+                <button class="btn btn-primary" id="btn-export-pdf-client" style="width:100%;">📄 PDF出力（お客様用）</button>
+                <button class="btn btn-outline" id="btn-export-pdf-internal" style="width:100%;">📄 PDF出力（社内用・明細付き）</button>
+                <button class="btn btn-danger" id="btn-clear-all" style="width:100%;margin-top:8px;">🗑 全てリセット</button>
+            </div>
+        </div>
+
+        <!-- スケール未設定警告 -->
+        <div id="scale-warning-msg" class="warn-box">
+            ⚠️ スケール（縮尺）が未設定です。<br>縮尺を設定すると概算見積・PDF出力が表示されます。
+        </div>
+
+    </div>
+</aside>
+
+<div id="print-dynamic-container"></div>
+<div id="toast-container"></div>
+
+<!-- =========================================
+     使い方モーダル
+========================================= -->
+<div id="help-modal" class="modal-overlay">
+    <div class="modal-box" style="max-width:580px;">
+        <div class="modal-header">
+            <div class="modal-title">❓ VAS概算見積ツールの使い方</div>
+            <button class="modal-close" id="btn-help-close">✕</button>
+        </div>
+        <div class="modal-body">
+            <ol style="padding-left:18px;display:flex;flex-direction:column;gap:14px;line-height:1.7;color:var(--text-primary);font-size:0.9rem;">
+                <li><strong>図面をアップロードする</strong><br>右パネルの「図面アップロード」から平面図の画像を読み込みます。iPadではその場で撮影も可能です。</li>
+                <li><strong>縮尺を設定する</strong><br>「縮尺を設定する」ボタン押下後、図面上の既知の2点をクリックし、実際の距離(m)を入力します。</li>
+                <li><strong>機器・配線をプロットする</strong><br>左パネルのアイコンを選択し、図面上をクリックして配置します。配線はタップで頂点追加、ダブルタップ/右クリックで確定。</li>
+                <li><strong>概算見積を確認・出力する</strong><br>配置した機器と配線長から右パネルにリアルタイムで金額が表示されます。完了後「PDF出力」で提案書を保存できます。</li>
+            </ol>
+            <div style="margin-top:16px;padding:12px;background:#fffbeb;border-left:4px solid var(--warning);border-radius:6px;font-size:0.82rem;color:#92400e;">
+                💡 <strong>Point:</strong> 「⚙️設定」から機器名・単価を変更し、「この設定をHTMLに保存」で自社専用の初期設定ファイルを作れます。
+            </div>
+            <div style="margin-top:16px;padding:12px;background:#f0fdf4;border:1px solid #6ee7b7;border-radius:8px;font-size:0.8rem;color:#065f46;line-height:1.7;">
+                🛡️ <strong>安全性について：</strong>このシステムはお使いのPC・ブラウザの中だけで動作します。図面・写真・見積内容が外部サーバーへ送信されることは<strong>一切ありません</strong>。
+            </div>
+        </div>
+        <div class="modal-footer">
+            <div style="font-size:0.7rem;color:var(--text-muted);font-family:monospace;margin-right:auto;">Designed &amp; Developed by Nakano</div>
+            <button class="btn btn-primary" id="btn-help-close2">閉じる</button>
+        </div>
+    </div>
+</div>
+
+<!-- =========================================
+     設定モーダル
+========================================= -->
+<div id="settings-modal" class="modal-overlay">
+    <div class="modal-box" style="max-width:680px;">
+        <div class="modal-header">
+            <div class="modal-title">⚙️ 名称・単価設定</div>
+            <button class="modal-close" id="btn-settings-close-x">✕</button>
+        </div>
+        <div class="modal-body">
+
+            <div class="settings-section-title">システム基本料金</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:6px;">
+                <div class="input-group">
+                    <label class="input-label">基本料金 (¥)</label>
+                    <input type="number" id="set-base-fee" class="form-control">
+                </div>
+                <div class="input-group">
+                    <label class="input-label">諸経費 (¥)</label>
+                    <input type="number" id="set-extra-fee" class="form-control">
+                </div>
+            </div>
+
+            <div class="settings-section-title">機器名称・単価</div>
+            <div id="settings-eq-grid"></div>
+
+            <div class="settings-section-title">配線名称・単価 (/1m)</div>
+            <div id="settings-lan-grid"></div>
+
+        </div>
+        <div class="modal-footer" style="justify-content:space-between;">
+            <button class="btn btn-success-soft" id="btn-settings-export-html">💾 この設定をHTMLに保存してダウンロード</button>
+            <div style="display:flex;gap:8px;">
+                <button class="btn btn-outline" id="btn-settings-cancel">キャンセル</button>
+                <button class="btn btn-primary" id="btn-settings-save">現プロジェクトに適用</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- =========================================
+     JavaScript
+========================================= -->
+<script>
+// デバッグ: JSエラーを画面にトースト表示
+window.addEventListener('error', e => {
+    const c = document.getElementById('toast-container');
+    if (c) {
+        const el = document.createElement('div');
+        el.style.cssText = 'background:#dc2626;color:white;padding:10px 16px;border-radius:8px;font-size:13px;max-width:400px;word-break:break-all;';
+        el.innerText = `[JS Error] ${e.message} (line ${e.lineno})`;
+        c.appendChild(el);
+    }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+
+    function getPage() { return state.pages[state.currentPageIndex]; }
+
+    // =========================================
+    // データマスター
+    // =========================================
+    let ITEMS = {
+        camera1:  { name: 'カメラ1',  color: '#2563eb', price: 15000, isCamera: true },
+        camera2:  { name: 'カメラ2',  color: '#dc2626', price: 20000, isCamera: true },
+        camera3:  { name: 'カメラ3',  color: '#059669', price: 30000, isCamera: true },
+        hub:      { name: 'HUB',       color: '#d97706', price: 10000, isCamera: false },
+        router:   { name: 'ルータ',   color: '#7c3aed', price: 7000,  isCamera: false },
+        other:    { name: 'その他',   color: '#475569', price: 10000, isCamera: false },
+        custom1:  { name: 'カスタム1', color: '#0891b2', price: 0,     isCamera: false },
+        custom2:  { name: 'カスタム2', color: '#be185d', price: 0,     isCamera: false },
+        custom3:  { name: 'カスタム3', color: '#92400e', price: 0,     isCamera: false }
+    };
+
+    let LAN_TYPES = {
+        ceiling:   { name: '天井配線',    color: '#2563eb', price: 500 },
+        floor:     { name: '床下配線',    color: '#dc2626', price: 500 },
+        outdoor:   { name: '屋外配線',    color: '#059669', price: 750 },
+        high:      { name: '高所配線',    color: '#d97706', price: 1000 },
+        customLan1:{ name: 'カスタム配線1', color: '#7c3aed', price: 0 },
+        customLan2:{ name: 'カスタム配線2', color: '#0891b2', price: 0 }
+    };
+
+    let BASE_FEE = 50000;
+    let EXTRA_FEE = 0;
+
+    // =========================================
+    // アプリ状態
+    // =========================================
+    const state = {
+        pages: [{ id: 'page_1', name: '1F', img: null, objects: [], lines: [], scaleFactor: 1, scalePoints: [], scaleLine: null }],
+        currentPageIndex: 0,
+        history: [],
+        redoHistory: [],
+        globalObjSize: 1,
+        mode: 'select',
+        currentType: null,
+        view: { x: 0, y: 0, zoom: 1 },
+        interaction: {
+            dragMode: null, isDragging: false, dragObj: null,
+            isPanning: false, panStart: { x: 0, y: 0 },
+            linePoints: [], hoverObj: null,
+            selectedObj: null, selectedLine: null, mousePos: null,
+            lastTouchStart: 0, lastTapTime: 0
+        }
+    };
+
+    // =========================================
+    // Canvas & レンダリング
+    // =========================================
+    const canvas = document.getElementById('main-canvas');
+    const ctx = canvas.getContext('2d');
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        render();
+    }
+    window.addEventListener('resize', resize);
+
+    function render() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(state.view.x, state.view.y);
+        ctx.scale(state.view.zoom, state.view.zoom);
+
+        const pg = getPage();
+        if (pg.img) ctx.drawImage(pg.img, 0, 0);
+
+        // 配線
+        pg.lines.forEach(l => {
+            const isSelected = (state.interaction.selectedLine === l);
+            ctx.beginPath();
+            ctx.strokeStyle = LAN_TYPES[l.type].color;
+            ctx.lineWidth = isSelected ? 10 / state.view.zoom : 5 / state.view.zoom;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.setLineDash(isSelected ? [14 / state.view.zoom, 8 / state.view.zoom] : []);
+            l.points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+            ctx.stroke();
+            ctx.setLineDash([]);
+        });
+
+        // 描画中配線
+        if (state.mode === 'add_line' && state.interaction.linePoints.length > 0) {
+            ctx.beginPath();
+            ctx.strokeStyle = LAN_TYPES[state.currentType].color;
+            ctx.lineWidth = 5 / state.view.zoom;
+            ctx.lineCap = 'round';
+            ctx.setLineDash([8 / state.view.zoom, 8 / state.view.zoom]);
+            state.interaction.linePoints.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+            if (state.interaction.mousePos) ctx.lineTo(state.interaction.mousePos.x, state.interaction.mousePos.y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // 縮尺線
+        if (pg.scaleLine && pg.scaleFactor !== 1) {
+            ctx.beginPath();
+            ctx.moveTo(pg.scaleLine.p1.x, pg.scaleLine.p1.y);
+            ctx.lineTo(pg.scaleLine.p2.x, pg.scaleLine.p2.y);
+            ctx.strokeStyle = 'rgba(220,38,38,0.85)';
+            ctx.lineWidth = 3 / state.view.zoom;
+            ctx.setLineDash([10 / state.view.zoom, 7 / state.view.zoom]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            const mx = (pg.scaleLine.p1.x + pg.scaleLine.p2.x) / 2;
+            const my = (pg.scaleLine.p1.y + pg.scaleLine.p2.y) / 2;
+            const textStr = `${pg.scaleLine.m}m`;
+            ctx.font = `bold ${14 / state.view.zoom}px 'Segoe UI', sans-serif`;
+            const tw = ctx.measureText(textStr).width;
+            const px = 6 / state.view.zoom, py = 5 / state.view.zoom, bh = 22 / state.view.zoom;
+            const yPos = my - 10 / state.view.zoom;
+            ctx.fillStyle = 'rgba(15,23,42,0.85)';
+            ctx.beginPath();
+            ctx.roundRect(mx - tw/2 - px, yPos - bh + py, tw + px*2, bh, 4 / state.view.zoom);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+            ctx.fillText(textStr, mx, yPos);
+        }
+
+        // 機器オブジェクト
+        pg.objects.forEach(obj => {
+            const itemDef = ITEMS[obj.type];
+            const size = 15 * obj.size / state.view.zoom;
+
+            // 視野角扇形（カメラのみ）
+            if (itemDef.isCamera) {
+                ctx.save();
+                ctx.translate(obj.x, obj.y);
+                ctx.rotate(obj.rot);
+                const range = 100 * obj.size / state.view.zoom;
+                const rad = obj.fov * Math.PI / 180;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, range, -rad/2, rad/2);
+                ctx.closePath();
+                ctx.fillStyle = `${itemDef.color}28`;
+                ctx.fill();
+                ctx.strokeStyle = `${itemDef.color}99`;
+                ctx.lineWidth = 1.5 / state.view.zoom;
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // 本体円
+            ctx.beginPath();
+            ctx.arc(obj.x, obj.y, size, 0, Math.PI * 2);
+            ctx.fillStyle = itemDef.color;
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+            ctx.lineWidth = 2.5 / state.view.zoom;
+            ctx.stroke();
+
+            // 選択ハイライト + ハンドル
+            if (state.interaction.selectedObj === obj) {
+                ctx.beginPath();
+                ctx.rect(obj.x - size - 6/state.view.zoom, obj.y - size - 6/state.view.zoom,
+                         size*2 + 12/state.view.zoom, size*2 + 12/state.view.zoom);
+                ctx.strokeStyle = '#1d4ed8';
+                ctx.lineWidth = 2 / state.view.zoom;
+                ctx.setLineDash([6/state.view.zoom, 4/state.view.zoom]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                if (itemDef.isCamera) {
+                    const rRadius = 100 * obj.size / state.view.zoom;
+                    const hr = 7 / state.view.zoom;
+                    const rx = obj.x + Math.cos(obj.rot) * rRadius;
+                    const ry = obj.y + Math.sin(obj.rot) * rRadius;
+                    ctx.beginPath(); ctx.arc(rx, ry, hr, 0, Math.PI*2);
+                    ctx.fillStyle = '#2563eb'; ctx.fill();
+                    ctx.strokeStyle = 'white'; ctx.lineWidth = 1.5/state.view.zoom; ctx.stroke();
+
+                    const fovRad = obj.fov * Math.PI / 180;
+                    [[obj.rot + fovRad/2], [obj.rot - fovRad/2]].forEach(([a]) => {
+                        const fx = obj.x + Math.cos(a) * rRadius;
+                        const fy = obj.y + Math.sin(a) * rRadius;
+                        ctx.beginPath(); ctx.arc(fx, fy, hr, 0, Math.PI*2);
+                        ctx.fillStyle = '#059669'; ctx.fill();
+                        ctx.strokeStyle = 'white'; ctx.stroke();
+                    });
+                }
+            }
+        });
+
+        // スケール設定中の点
+        if (pg.scalePoints.length > 0) {
+            ctx.fillStyle = '#dc2626';
+            pg.scalePoints.forEach(p => {
+                ctx.beginPath(); ctx.arc(p.x, p.y, 5/state.view.zoom, 0, Math.PI*2); ctx.fill();
+            });
+            if (pg.scalePoints.length === 2) {
+                ctx.beginPath();
+                ctx.moveTo(pg.scalePoints[0].x, pg.scalePoints[0].y);
+                ctx.lineTo(pg.scalePoints[1].x, pg.scalePoints[1].y);
+                ctx.strokeStyle = '#dc2626'; ctx.lineWidth = 2/state.view.zoom; ctx.stroke();
+            }
+        }
+
+        ctx.restore();
+    }
+
+    // =========================================
+    // 計算
+    // =========================================
+    function calculateEstimates(pageIndex = state.currentPageIndex) {
+        let cameraCount = 0, otherCount = 0, objFee = 0, lanLenTotal = 0, lanFee = 0;
+        const pg = state.pages[pageIndex];
+
+        pg.objects.forEach(obj => {
+            const d = ITEMS[obj.type];
+            objFee += d.price;
+            if (d.isCamera) cameraCount++; else otherCount++;
+        });
+
+        pg.lines.forEach(line => {
+            let pxLen = 0;
+            for (let i = 0; i < line.points.length - 1; i++) {
+                const dx = line.points[i+1].x - line.points[i].x;
+                const dy = line.points[i+1].y - line.points[i].y;
+                pxLen += Math.sqrt(dx*dx + dy*dy);
+            }
+            const mLen = pxLen * pg.scaleFactor;
+            lanLenTotal += mLen;
+            lanFee += mLen * LAN_TYPES[line.type].price;
+        });
+
+        const isFirstPage = (pageIndex === 0);
+        const currentBaseFee = isFirstPage ? BASE_FEE + EXTRA_FEE : 0;
+        const total = currentBaseFee + objFee + lanFee;
+
+        if (pageIndex === state.currentPageIndex) {
+            // 常に全フロア合計を表示する
+            const all = calculateAllEstimates();
+            let allObjFee = 0, allLanFee = 0;
+            state.pages.forEach(p => {
+                p.objects.forEach(o => allObjFee += ITEMS[o.type].price);
+                p.lines.forEach(l => {
+                    let px = 0;
+                    for (let i = 0; i < l.points.length - 1; i++) {
+                        const dx = l.points[i+1].x - l.points[i].x;
+                        const dy = l.points[i+1].y - l.points[i].y;
+                        px += Math.sqrt(dx*dx + dy*dy);
+                    }
+                    allLanFee += (px * p.scaleFactor) * LAN_TYPES[l.type].price;
+                });
+            });
+
+            const cardBase = document.getElementById('card-base-fee');
+            if (cardBase) cardBase.style.display = 'flex';
+            if (document.getElementById('stat-base-fee'))
+                document.getElementById('stat-base-fee').innerText = `¥${(BASE_FEE + EXTRA_FEE).toLocaleString()}`;
+
+            document.getElementById('stat-obj-count').innerText = all.cameraCount + all.otherCount;
+            document.getElementById('stat-obj-fee').innerText = `¥${Math.round(allObjFee).toLocaleString()}`;
+            document.getElementById('stat-lan-length').innerText = all.lanLenTotal.toFixed(1);
+            document.getElementById('stat-lan-fee').innerText = `¥${Math.round(allLanFee).toLocaleString()}`;
+            document.getElementById('stat-total-fee').innerText = `¥${Math.round(all.total).toLocaleString()}`;
+            updateScaleStatus();
+        }
+        return { cameraCount, otherCount, lanLenTotal, total };
+    }
+
+    function calculateAllEstimates() {
+        let cameraCount = 0, otherCount = 0, objFee = 0, lanLenTotal = 0, lanFee = 0;
+        state.pages.forEach(pg => {
+            pg.objects.forEach(obj => {
+                const d = ITEMS[obj.type];
+                objFee += d.price;
+                if (d.isCamera) cameraCount++; else otherCount++;
+            });
+            pg.lines.forEach(line => {
+                let px = 0;
+                for (let i = 0; i < line.points.length - 1; i++) {
+                    const dx = line.points[i+1].x - line.points[i].x;
+                    const dy = line.points[i+1].y - line.points[i].y;
+                    px += Math.sqrt(dx*dx + dy*dy);
+                }
+                const mLen = px * pg.scaleFactor;
+                lanLenTotal += mLen;
+                lanFee += mLen * LAN_TYPES[line.type].price;
+            });
+        });
+        return { cameraCount, otherCount, lanLenTotal, total: BASE_FEE + EXTRA_FEE + objFee + lanFee };
+    }
+
+    function updateScaleStatus() {
+        const pg = getPage();
+        const currentScaleSet = pg.scaleFactor !== 1;
+        const badge = document.getElementById('scale-status');
+        const hint  = document.getElementById('scale-info-hint');
+        if (currentScaleSet) {
+            badge.style.display = 'flex';
+            document.getElementById('scale-value-display').innerText = pg.scaleLine ? `${pg.scaleLine.m}m` : '設定済み';
+            if (hint) hint.style.display = 'none';
+        } else {
+            badge.style.display = 'none';
+            if (hint) hint.style.display = 'flex';
+        }
+        document.getElementById('estimate-section').style.display = currentScaleSet ? 'block' : 'none';
+        document.getElementById('export-section').style.display = currentScaleSet ? 'block' : 'none';
+        document.getElementById('scale-warning-msg').style.display = currentScaleSet ? 'none' : 'block';
+    }
+
+    function saveHistory() {
+        const pg = getPage();
+        state.history.push(JSON.parse(JSON.stringify({
+            pageIndex: state.currentPageIndex,
+            objects: pg.objects, lines: pg.lines,
+            scaleFactor: pg.scaleFactor, scaleLine: pg.scaleLine
+        })));
+        if (state.history.length > 30) state.history.shift();
+        state.redoHistory = [];
+    }
+
+    function undo() {
+        if (!state.history.length) return;
+        const pg = getPage();
+        state.redoHistory.push(JSON.parse(JSON.stringify({
+            pageIndex: state.currentPageIndex,
+            objects: pg.objects, lines: pg.lines,
+            scaleFactor: pg.scaleFactor, scaleLine: pg.scaleLine
+        })));
+        const prev = state.history.pop();
+        if (state.currentPageIndex !== prev.pageIndex) switchPage(prev.pageIndex);
+        const np = getPage();
+        np.objects = prev.objects; np.lines = prev.lines;
+        np.scaleFactor = prev.scaleFactor; np.scaleLine = prev.scaleLine;
+        render(); calculateEstimates(); updateScaleStatus();
+        toast('元に戻しました', 'info');
+    }
+
+    function redo() {
+        if (!state.redoHistory.length) return;
+        const pg = getPage();
+        state.history.push(JSON.parse(JSON.stringify({
+            pageIndex: state.currentPageIndex,
+            objects: pg.objects, lines: pg.lines,
+            scaleFactor: pg.scaleFactor, scaleLine: pg.scaleLine
+        })));
+        const next = state.redoHistory.pop();
+        if (state.currentPageIndex !== next.pageIndex) switchPage(next.pageIndex);
+        const np = getPage();
+        np.objects = next.objects; np.lines = next.lines;
+        np.scaleFactor = next.scaleFactor; np.scaleLine = next.scaleLine;
+        render(); calculateEstimates(); updateScaleStatus();
+        toast('やり直しました', 'info');
+    }
+
+    // =========================================
+    // モードUI更新
+    // =========================================
+    function updateModeUI() {
+        const ind = document.getElementById('mode-indicator');
+        const lbl = document.getElementById('mode-label');
+        ind.className = 'mode-indicator';
+        switch (state.mode) {
+            case 'select':
+                lbl.innerText = '選択モード'; break;
+            case 'select_line':
+                lbl.innerText = '配線選択モード';
+                ind.classList.add('mode-line'); break;
+            case 'add_obj':
+                lbl.innerText = `配置中: ${ITEMS[state.currentType]?.name || ''}`;
+                ind.classList.add('mode-add'); break;
+            case 'add_line':
+                lbl.innerText = `配線中: ${LAN_TYPES[state.currentType]?.name || ''}`;
+                ind.classList.add('mode-line'); break;
+            case 'scale':
+                lbl.innerText = 'スケール設定中';
+                ind.classList.add('mode-scale'); break;
+        }
+    }
+
+    // =========================================
+    // インタラクション
+    // =========================================
+    function getEventPoint(e) {
+        if (e.touches && e.touches.length > 0) return { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY, button: 0 };
+        if (e.changedTouches && e.changedTouches.length > 0) return { clientX: e.changedTouches[0].clientX, clientY: e.changedTouches[0].clientY, button: 0 };
+        return { clientX: e.clientX, clientY: e.clientY, button: e.button, shiftKey: e.shiftKey };
+    }
+
+    function getCanvasPoint(evtInfo) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: (evtInfo.clientX - rect.left - state.view.x) / state.view.zoom,
+            y: (evtInfo.clientY - rect.top  - state.view.y) / state.view.zoom
+        };
+    }
+
+    function handlePointerDown(e) {
+        if (e.type === 'touchstart') {
+            state.interaction.lastTouchStart = Date.now();
+            if (e.cancelable) e.preventDefault();
+        } else if (e.type === 'mousedown') {
+            if (state.interaction.lastTouchStart && (Date.now() - state.interaction.lastTouchStart) < 500) return;
+        }
+
+        const evtInfo = getEventPoint(e);
+        if (e.type === 'touchstart' && e.touches.length === 2) {
+            state.interaction.isPanning = true;
+            state.interaction.panStart = { x: evtInfo.clientX, y: evtInfo.clientY };
+            return;
+        }
+
+        if (evtInfo.button === 1 || (evtInfo.button === 0 && evtInfo.shiftKey)) {
+            state.interaction.isPanning = true;
+            state.interaction.panStart = { x: evtInfo.clientX, y: evtInfo.clientY };
+            return;
+        }
+
+        const p = getCanvasPoint(evtInfo);
+        const pg = getPage();
+
+        // スケール設定モード
+        if (state.mode === 'scale') {
+            pg.scalePoints.push(p);
+            if (pg.scalePoints.length === 2) {
+                const dist = prompt('2点間の実際の距離をメートル(m)で入力してください。', '10');
+                if (dist && !isNaN(dist) && Number(dist) > 0) {
+                    const dx = pg.scalePoints[1].x - pg.scalePoints[0].x;
+                    const dy = pg.scalePoints[1].y - pg.scalePoints[0].y;
+                    saveHistory();
+                    pg.scaleFactor = Number(dist) / Math.sqrt(dx*dx + dy*dy);
+                    pg.scaleLine = { p1: pg.scalePoints[0], p2: pg.scalePoints[1], m: dist };
+                    toast('縮尺を設定しました', 'success');
+                }
+                pg.scalePoints = [];
+                state.mode = 'select';
+                updateModeUI();
+            }
+            render();
+            return;
+        }
+
+        // ハンドル判定（選択中カメラ）
+        if (evtInfo.button === 0 && state.interaction.selectedObj && ITEMS[state.interaction.selectedObj.type]?.isCamera) {
+            const obj = state.interaction.selectedObj;
+            if (pg.objects.includes(obj)) {
+                const rRadius = 100 * obj.size / state.view.zoom;
+                const hr = 12 / state.view.zoom;
+                const rx = obj.x + Math.cos(obj.rot) * rRadius;
+                const ry = obj.y + Math.sin(obj.rot) * rRadius;
+                const fovRad = obj.fov * Math.PI / 180;
+                const fx  = obj.x + Math.cos(obj.rot + fovRad/2) * rRadius;
+                const fy  = obj.y + Math.sin(obj.rot + fovRad/2) * rRadius;
+                const fx2 = obj.x + Math.cos(obj.rot - fovRad/2) * rRadius;
+                const fy2 = obj.y + Math.sin(obj.rot - fovRad/2) * rRadius;
+
+                if (Math.hypot(rx - p.x, ry - p.y) < hr) { saveHistory(); state.interaction.dragMode = 'rot'; return; }
+                if (Math.hypot(fx - p.x, fy - p.y) < hr || Math.hypot(fx2 - p.x, fy2 - p.y) < hr) { saveHistory(); state.interaction.dragMode = 'fov'; return; }
+            }
+        }
+
+        // 選択・配線選択モード
+        if (evtInfo.button === 0 && (state.mode === 'select' || state.mode === 'select_line')) {
+            let clickedObj = null;
+            if (state.mode !== 'select_line') {
+                for (let i = pg.objects.length - 1; i >= 0; i--) {
+                    const obj = pg.objects[i];
+                    if (Math.hypot(obj.x - p.x, obj.y - p.y) < 20 * obj.size / state.view.zoom) { clickedObj = obj; break; }
+                }
+            }
+            let clickedLine = null;
+            if (!clickedObj) {
+                const tol = 14 / state.view.zoom;
+                outer: for (let i = pg.lines.length - 1; i >= 0; i--) {
+                    const line = pg.lines[i];
+                    for (let j = 0; j < line.points.length - 1; j++) {
+                        const p1 = line.points[j], p2 = line.points[j+1];
+                        const l2 = (p2.x-p1.x)**2 + (p2.y-p1.y)**2;
+                        if (l2 === 0) continue;
+                        const t = Math.max(0, Math.min(1, ((p.x-p1.x)*(p2.x-p1.x) + (p.y-p1.y)*(p2.y-p1.y)) / l2));
+                        const proj = { x: p1.x + t*(p2.x-p1.x), y: p1.y + t*(p2.y-p1.y) };
+                        if (Math.hypot(p.x - proj.x, p.y - proj.y) < tol) { clickedLine = line; break outer; }
+                    }
+                }
+            }
+
+            if (clickedObj) {
+                state.interaction.selectedObj = clickedObj;
+                state.interaction.selectedLine = null;
+                saveHistory();
+                state.interaction.isDragging = true;
+                state.interaction.dragObj = clickedObj;
+                updatePropertyPanel();
+                if (state.mode === 'add_obj') { state.mode = 'select'; updateModeUI(); }
+                document.querySelectorAll('.item-card').forEach(n => n.classList.remove('selected'));
+                render(); return;
+            } else if (clickedLine) {
+                state.interaction.selectedObj = null;
+                state.interaction.selectedLine = clickedLine;
+                updatePropertyPanel();
+                document.querySelectorAll('.item-card').forEach(n => n.classList.remove('selected'));
+                render(); return;
+            }
+        }
+
+        // 機器配置モード
+        if (state.mode === 'add_obj') {
+            // 既存オブジェクトをクリックした場合は選択・ドラッグ開始に切り替え
+            let clickedExisting = null;
+            for (let i = pg.objects.length - 1; i >= 0; i--) {
+                const obj = pg.objects[i];
+                if (Math.hypot(obj.x - p.x, obj.y - p.y) < 20 * obj.size / state.view.zoom) { clickedExisting = obj; break; }
+            }
+            if (clickedExisting) {
+                state.mode = 'select'; updateModeUI();
+                state.interaction.selectedObj = clickedExisting;
+                state.interaction.selectedLine = null;
+                saveHistory();
+                state.interaction.isDragging = true;
+                state.interaction.dragObj = clickedExisting;
+                updatePropertyPanel();
+                document.querySelectorAll('.item-card').forEach(n => n.classList.remove('selected'));
+                render(); return;
+            }
+            // 新規オブジェクトを配置
+            saveHistory();
+            const newObj = { id: Date.now(), type: state.currentType, x: p.x, y: p.y, size: state.globalObjSize || 1, rot: 0, fov: 60 };
+            pg.objects.push(newObj);
+            state.interaction.selectedObj = newObj;
+            state.interaction.selectedLine = null;
+            updatePropertyPanel();
+            calculateEstimates(); render();
+            return;
+        }
+
+        // 配線描画モード
+        if (state.mode === 'add_line') {
+            const now = Date.now();
+            const isDoubleTap = (now - state.interaction.lastTapTime) < 400;
+            state.interaction.lastTapTime = now;
+            if (evtInfo.button === 0) {
+                if (isDoubleTap && state.interaction.linePoints.length > 0) {
+                    saveHistory();
+                    pg.lines.push({ type: state.currentType, points: [...state.interaction.linePoints] });
+                    state.interaction.linePoints = [];
+                    calculateEstimates();
+                    toast('配線を確定しました', 'success');
+                } else {
+                    state.interaction.linePoints.push(p);
+                }
+            } else if (evtInfo.button === 2 && state.interaction.linePoints.length > 1) {
+                saveHistory();
+                pg.lines.push({ type: state.currentType, points: [...state.interaction.linePoints] });
+                state.interaction.linePoints = [];
+                calculateEstimates();
+                toast('配線を確定しました', 'success');
+            }
+            render();
+            if (e.preventDefault) e.preventDefault();
+            return;
+        }
+
+        // 空白クリック → 選択解除 + パン開始
+        if (evtInfo.button === 0 && (state.mode === 'select' || state.mode === 'select_line')) {
+            state.interaction.selectedObj = null;
+            state.interaction.selectedLine = null;
+            if (state.mode === 'select_line') {
+                state.mode = 'select'; updateModeUI();
+                document.getElementById('btn-select-line').classList.remove('active');
+            }
+            document.getElementById('property-panel').style.display = 'none';
+            state.interaction.isPanning = true;
+            state.interaction.panStart = { x: evtInfo.clientX, y: evtInfo.clientY };
+            render();
+        } else if (evtInfo.button === 2 && state.interaction.selectedObj) {
+            saveHistory();
+            state.interaction.selectedObj.rot += Math.PI / 4;
+            updatePropertyPanel(); render();
+            if (e.preventDefault) e.preventDefault();
+        }
+    }
+
+    function handlePointerMove(e) {
+        if (e.type === 'touchmove') e.preventDefault();
+        const evtInfo = getEventPoint(e);
+        if (!evtInfo) return;
+        const p = getCanvasPoint(evtInfo);
+        state.interaction.mousePos = p;
+
+        if (state.interaction.isPanning) {
+            state.view.x += evtInfo.clientX - state.interaction.panStart.x;
+            state.view.y += evtInfo.clientY - state.interaction.panStart.y;
+            state.interaction.panStart = { x: evtInfo.clientX, y: evtInfo.clientY };
+            render(); return;
+        }
+
+        if (state.interaction.dragMode === 'rot' && state.interaction.selectedObj) {
+            state.interaction.selectedObj.rot = Math.atan2(p.y - state.interaction.selectedObj.y, p.x - state.interaction.selectedObj.x);
+            updatePropertyPanel(); render(); return;
+        }
+
+        if (state.interaction.dragMode === 'fov' && state.interaction.selectedObj) {
+            const obj = state.interaction.selectedObj;
+            let delta = Math.atan2(p.y - obj.y, p.x - obj.x) - obj.rot;
+            while (delta < -Math.PI) delta += Math.PI * 2;
+            while (delta > Math.PI)  delta -= Math.PI * 2;
+            obj.fov = Math.min(360, Math.max(10, Math.round(Math.abs(delta) * 2 * 180 / Math.PI)));
+            updatePropertyPanel(); render(); return;
+        }
+
+        if (state.interaction.isDragging && state.interaction.dragObj) {
+            state.interaction.dragObj.x = p.x;
+            state.interaction.dragObj.y = p.y;
+            render();
+        }
+
+        if (state.mode === 'add_line' && state.interaction.linePoints.length > 0) render();
+
+        // カーソル
+        let cursor = 'crosshair';
+        if (state.interaction.isPanning || state.interaction.dragMode) cursor = 'grabbing';
+        else if (state.mode === 'select' && state.interaction.selectedObj) {
+            const obj = state.interaction.selectedObj;
+            const size = 15 * obj.size / state.view.zoom;
+            cursor = (p.x >= obj.x - size - 5/state.view.zoom && p.x <= obj.x + size + 5/state.view.zoom &&
+                      p.y >= obj.y - size - 5/state.view.zoom && p.y <= obj.y + size + 5/state.view.zoom) ? 'grab' : 'crosshair';
+        }
+        canvas.style.cursor = cursor;
+    }
+
+    function handlePointerUp() {
+        if (state.interaction.isPanning) state.interaction.isPanning = false;
+        if (state.interaction.dragMode) { state.interaction.dragMode = null; calculateEstimates(); render(); }
+        if (state.interaction.isDragging) { state.interaction.isDragging = false; calculateEstimates(); render(); }
+    }
+
+    canvas.addEventListener('mousedown', handlePointerDown);
+    canvas.addEventListener('mousemove', handlePointerMove);
+    window.addEventListener('mouseup', handlePointerUp);
+    canvas.addEventListener('touchstart', handlePointerDown, { passive: false });
+    canvas.addEventListener('touchmove', handlePointerMove, { passive: false });
+    window.addEventListener('touchend', handlePointerUp);
+    window.addEventListener('touchcancel', handlePointerUp);
+
+    canvas.addEventListener('wheel', e => {
+        e.preventDefault();
+        const evtInfo = getEventPoint(e);
+        const p1 = getCanvasPoint(evtInfo);
+        state.view.zoom = Math.max(0.1, Math.min(state.view.zoom * (e.deltaY > 0 ? 0.9 : 1.1), 5));
+        const p2 = getCanvasPoint(evtInfo);
+        state.view.x += (p2.x - p1.x) * state.view.zoom;
+        state.view.y += (p2.y - p1.y) * state.view.zoom;
+        render();
+    }, { passive: false });
+
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+    // =========================================
+    // キーボードショートカット
+    // =========================================
+    window.addEventListener('keydown', e => {
+        const tag = e.target.tagName.toLowerCase();
+        if (tag === 'input' || tag === 'textarea') return;
+
+        if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); return; }
+        if (e.ctrlKey && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redo(); return; }
+
+        if (e.key === 'Escape') {
+            if (state.mode === 'add_line') { state.interaction.linePoints = []; }
+            state.interaction.selectedObj = null;
+            state.interaction.selectedLine = null;
+            document.getElementById('property-panel').style.display = 'none';
+            document.querySelectorAll('.item-card').forEach(n => n.classList.remove('selected'));
+            if (state.mode !== 'select') { state.mode = 'select'; updateModeUI(); }
+            document.getElementById('btn-select-line').classList.remove('active');
+            render();
+        }
+
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+            const pg = getPage();
+            if (state.interaction.selectedObj) {
+                saveHistory();
+                pg.objects = pg.objects.filter(o => o !== state.interaction.selectedObj);
+                state.interaction.selectedObj = null;
+                updatePropertyPanel(); calculateEstimates(); render();
+            } else if (state.interaction.selectedLine) {
+                saveHistory();
+                pg.lines = pg.lines.filter(l => l !== state.interaction.selectedLine);
+                state.interaction.selectedLine = null;
+                updatePropertyPanel(); calculateEstimates(); render();
+            }
+        }
+    });
+
+    // =========================================
+    // ページ管理
+    // =========================================
+    function updatePageTabs() {
+        const list = document.getElementById('page-tabs-list');
+        list.innerHTML = '';
+        state.pages.forEach((pg, i) => {
+            const el = document.createElement('div');
+            el.className = `page-tab ${i === state.currentPageIndex ? 'active' : ''}`;
+            const nameSpan = document.createElement('span');
+            nameSpan.innerText = pg.name;
+            nameSpan.onclick = () => switchPage(i);
+            el.appendChild(nameSpan);
+            list.appendChild(el);
+        });
+    }
+
+    function switchPage(index) {
+        if (index < 0 || index >= state.pages.length) return;
+        state.currentPageIndex = index;
+        state.interaction.selectedObj = null;
+        state.interaction.selectedLine = null;
+        state.mode = 'select';
+        updateModeUI();
+        document.querySelectorAll('.item-card').forEach(n => n.classList.remove('selected'));
+        document.getElementById('btn-select-line').classList.remove('active');
+        updatePropertyPanel();
+        updateScaleStatus();
+
+        const pg = getPage();
+        if (pg.img) {
+            const topUIH = 130;
+            const availH = Math.max(100, canvas.height - topUIH);
+            state.view.zoom = Math.min(canvas.width / pg.img.width, availH / pg.img.height) * 0.85;
+            state.view.x = (canvas.width - pg.img.width * state.view.zoom) / 2;
+            state.view.y = topUIH + (availH - pg.img.height * state.view.zoom) / 2;
+        } else {
+            state.view = { x: 0, y: 0, zoom: 1 };
+        }
+
+        updatePageTabs();
+        render();
+        calculateEstimates();
+    }
+
+    function addPage() {
+        const name = prompt('新しいフロアの名前を入力してください', `${state.pages.length + 1}F`);
+        if (name === null) return;
+        state.pages.push({ id: `page_${Date.now()}`, name: name || `${state.pages.length + 1}F`, objects: [], lines: [], img: null, scaleFactor: 1, scalePoints: [], scaleLine: null });
+        switchPage(state.pages.length - 1);
+        toast('新しいフロアを追加しました', 'success');
+    }
+
+    function deletePage(index) {
+        if (state.pages.length <= 1) { toast('最後のフロアは削除できません', 'warning'); return; }
+        if (confirm(`「${state.pages[index].name}」を削除してもよろしいですか？\nこの操作は元に戻せません。`)) {
+            state.pages.splice(index, 1);
+            state.history = [];
+            if (state.currentPageIndex >= state.pages.length) state.currentPageIndex = state.pages.length - 1;
+            switchPage(state.currentPageIndex);
+            toast('フロアを削除しました', 'info');
+        }
+    }
+
+    document.getElementById('btn-add-page').onclick = addPage;
+    document.getElementById('btn-delete-page').onclick = () => deletePage(state.currentPageIndex);
+
+    // =========================================
+    // トースト通知
+    // =========================================
+    function toast(msg, type = 'info') {
+        const c = document.getElementById('toast-container');
+        const el = document.createElement('div');
+        el.className = `toast ${type}`;
+        el.innerText = msg;
+        c.appendChild(el);
+        setTimeout(() => {
+            el.style.animation = 'toastOut 0.3s ease forwards';
+            setTimeout(() => el.remove(), 300);
+        }, 2800);
+    }
+
+    // =========================================
+    // プロパティパネル
+    // =========================================
+    function updatePropertyPanel() {
+        const panel = document.getElementById('property-panel');
+        const objCtrls = document.getElementById('prop-obj-controls');
+        const title = document.getElementById('prop-panel-title');
+
+        if (state.interaction.selectedObj) {
+            panel.style.display = 'flex';
+            objCtrls.style.display = 'block';
+            title.innerText = `${ITEMS[state.interaction.selectedObj.type]?.name || '機器'} プロパティ`;
+            const obj = state.interaction.selectedObj;
+            document.getElementById('prop-size').value = state.globalObjSize || 1;
+            document.getElementById('prop-rot').value = Math.round(obj.rot * 180 / Math.PI);
+            const fovGroup = document.getElementById('prop-fov-group');
+            if (ITEMS[obj.type].isCamera) {
+                fovGroup.style.display = 'flex';
+                document.getElementById('prop-fov').value = obj.fov;
+            } else {
+                fovGroup.style.display = 'none';
+            }
+        } else if (state.interaction.selectedLine) {
+            panel.style.display = 'flex';
+            objCtrls.style.display = 'none';
+            title.innerText = `${LAN_TYPES[state.interaction.selectedLine.type]?.name || '配線'} プロパティ`;
+        } else {
+            panel.style.display = 'none';
+        }
+    }
+
+    document.getElementById('prop-size').oninput = e => {
+        state.globalObjSize = parseFloat(e.target.value);
+        getPage().objects.forEach(o => o.size = state.globalObjSize);
+        render();
+    };
+    document.getElementById('prop-rot').oninput = e => {
+        if (state.interaction.selectedObj) { state.interaction.selectedObj.rot = parseFloat(e.target.value) * Math.PI / 180; render(); }
+    };
+    document.getElementById('prop-fov').oninput = e => {
+        if (state.interaction.selectedObj) { state.interaction.selectedObj.fov = Math.round(parseFloat(e.target.value)); render(); }
+    };
+    document.getElementById('btn-delete-obj').onclick = () => {
+        const pg = getPage();
+        if (state.interaction.selectedObj) {
+            saveHistory();
+            pg.objects = pg.objects.filter(o => o !== state.interaction.selectedObj);
+            state.interaction.selectedObj = null;
+        } else if (state.interaction.selectedLine) {
+            saveHistory();
+            pg.lines = pg.lines.filter(l => l !== state.interaction.selectedLine);
+            state.interaction.selectedLine = null;
+        }
+        updatePropertyPanel(); calculateEstimates(); render();
+    };
+
+    // =========================================
+    // グリッドレンダリング
+    // =========================================
+    function renderLists() {
+        const eqGrid = document.getElementById('equipment-grid');
+        eqGrid.innerHTML = '';
+        Object.keys(ITEMS).forEach(k => {
+            const el = document.createElement('div');
+            el.className = 'item-card';
+            el.innerHTML = `<div class="item-swatch" style="background:${ITEMS[k].color}"></div>
+                <span class="item-name">${ITEMS[k].name}</span>
+                <span class="item-price">¥${ITEMS[k].price.toLocaleString()}</span>`;
+            el.onclick = () => {
+                document.querySelectorAll('.item-card').forEach(n => n.classList.remove('selected'));
+                el.classList.add('selected');
+                state.mode = 'add_obj'; state.currentType = k;
+                state.interaction.linePoints = [];
+                updateModeUI();
+                toast(`${ITEMS[k].name}を選択 — クリックして配置`, 'info');
+            };
+            eqGrid.appendChild(el);
+        });
+
+        const lnGrid = document.getElementById('lan-grid');
+        lnGrid.innerHTML = '';
+        Object.keys(LAN_TYPES).forEach(k => {
+            const el = document.createElement('div');
+            el.className = 'item-card';
+            el.innerHTML = `<div class="item-swatch" style="background:${LAN_TYPES[k].color}"></div>
+                <span class="item-name">${LAN_TYPES[k].name}</span>
+                <span class="item-price">¥${LAN_TYPES[k].price.toLocaleString()}/m</span>`;
+            el.onclick = () => {
+                document.querySelectorAll('.item-card').forEach(n => n.classList.remove('selected'));
+                el.classList.add('selected');
+                state.mode = 'add_line'; state.currentType = k;
+                state.interaction.selectedObj = null; state.interaction.selectedLine = null;
+                updatePropertyPanel();
+                document.getElementById('btn-select-line').classList.remove('active');
+                updateModeUI();
+                toast(`${LAN_TYPES[k].name}を選択 — タップで頂点追加、ダブルタップ/右クリックで確定`, 'info');
+            };
+            lnGrid.appendChild(el);
+        });
+    }
+    renderLists();
+
+    // =========================================
+    // ファイル操作
+    // =========================================
+    document.getElementById('img-upload-zone').onclick = () => document.getElementById('file-input').click();
+    document.getElementById('file-input').onchange = e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => {
+            const img = new Image();
+            img.onload = () => {
+                const pg = state.pages[state.currentPageIndex];
+                pg.img = img;
+                const topUIH = 130;
+                const availH = Math.max(100, canvas.height - topUIH);
+                state.view.zoom = Math.min(canvas.width / img.width, availH / img.height) * 0.85;
+                state.view.x = (canvas.width - img.width * state.view.zoom) / 2;
+                state.view.y = topUIH + (availH - img.height * state.view.zoom) / 2;
+                render();
+                toast('図面を読み込みました', 'success');
+            };
+            img.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+        e.target.value = '';
+    };
+
+    document.getElementById('btn-set-scale').onclick = () => {
+        state.mode = 'scale';
+        getPage().scalePoints = [];
+        document.querySelectorAll('.item-card').forEach(n => n.classList.remove('selected'));
+        updateModeUI();
+        toast('図面上の2点をクリックして縮尺を設定してください', 'warning');
+    };
+
+    document.getElementById('btn-undo').onclick = undo;
+    document.getElementById('btn-redo').onclick = redo;
+
+    document.getElementById('btn-reset-view').onclick = () => {
+        const pg = getPage();
+        if (pg.img) {
+            const topUIH = 130;
+            const availH = Math.max(100, canvas.height - topUIH);
+            state.view.zoom = Math.min(canvas.width / pg.img.width, availH / pg.img.height) * 0.85;
+            state.view.x = (canvas.width - pg.img.width * state.view.zoom) / 2;
+            state.view.y = topUIH + (availH - pg.img.height * state.view.zoom) / 2;
+        } else {
+            state.view = { x: 0, y: 0, zoom: 1 };
+        }
+        render();
+    };
+
+    document.getElementById('btn-select-line').onclick = e => {
+        const btn = e.currentTarget;
+        if (state.mode === 'select_line') {
+            state.mode = 'select'; btn.classList.remove('active');
+        } else {
+            state.mode = 'select_line'; btn.classList.add('active');
+            document.querySelectorAll('.item-card').forEach(n => n.classList.remove('selected'));
+            state.interaction.selectedObj = null; updatePropertyPanel();
+            toast('配線選択モード — 配線をクリックして選択できます', 'info');
+        }
+        updateModeUI(); render();
+    };
+
+    // =========================================
+    // ヘルプモーダル
+    // =========================================
+    document.getElementById('btn-help').onclick = () => { document.getElementById('help-modal').style.display = 'flex'; };
+    document.getElementById('btn-help-close').onclick = () => { document.getElementById('help-modal').style.display = 'none'; };
+    document.getElementById('btn-help-close2').onclick = () => { document.getElementById('help-modal').style.display = 'none'; };
+
+    // =========================================
+    // 設定モーダル
+    // =========================================
+    document.getElementById('btn-settings').onclick = () => {
+        document.getElementById('set-base-fee').value = BASE_FEE;
+        document.getElementById('set-extra-fee').value = EXTRA_FEE;
+
+        const eqGrid = document.getElementById('settings-eq-grid');
+        const lanGrid = document.getElementById('settings-lan-grid');
+        eqGrid.innerHTML = ''; lanGrid.innerHTML = '';
+
+        Object.keys(ITEMS).forEach(k => {
+            const row = document.createElement('div');
+            row.className = 'settings-row';
+            row.innerHTML = `
+                <div class="input-group" style="flex:2;">
+                    <label class="input-label">機器名称</label>
+                    <input type="text" id="set-eqname-${k}" value="${ITEMS[k].name}" class="form-control">
+                </div>
+                <div class="input-group" style="flex:1;">
+                    <label class="input-label">単価 (¥)</label>
+                    <input type="number" id="set-eq-${k}" value="${ITEMS[k].price}" class="form-control">
+                </div>`;
+            eqGrid.appendChild(row);
+        });
+
+        Object.keys(LAN_TYPES).forEach(k => {
+            const row = document.createElement('div');
+            row.className = 'settings-row';
+            row.innerHTML = `
+                <div class="input-group" style="flex:2;">
+                    <label class="input-label">配線名称</label>
+                    <input type="text" id="set-lanname-${k}" value="${LAN_TYPES[k].name}" class="form-control">
+                </div>
+                <div class="input-group" style="flex:1;">
+                    <label class="input-label">単価 (¥/m)</label>
+                    <input type="number" id="set-lan-${k}" value="${LAN_TYPES[k].price}" class="form-control">
+                </div>`;
+            lanGrid.appendChild(row);
+        });
+
+        document.getElementById('settings-modal').style.display = 'flex';
+    };
+
+    function applySettingsToState() {
+        const bFee = document.getElementById('set-base-fee').value;
+        if (bFee !== '') BASE_FEE = parseInt(bFee, 10);
+        const eFee = document.getElementById('set-extra-fee').value;
+        if (eFee !== '') EXTRA_FEE = parseInt(eFee, 10);
+        Object.keys(ITEMS).forEach(k => {
+            const p = document.getElementById(`set-eq-${k}`)?.value;
+            const n = document.getElementById(`set-eqname-${k}`)?.value;
+            if (p !== undefined && p !== '') ITEMS[k].price = parseInt(p, 10);
+            if (n) ITEMS[k].name = n;
+        });
+        Object.keys(LAN_TYPES).forEach(k => {
+            const p = document.getElementById(`set-lan-${k}`)?.value;
+            const n = document.getElementById(`set-lanname-${k}`)?.value;
+            if (p !== undefined && p !== '') LAN_TYPES[k].price = parseInt(p, 10);
+            if (n) LAN_TYPES[k].name = n;
+        });
+    }
+
+    const closeSettings = () => { document.getElementById('settings-modal').style.display = 'none'; };
+    document.getElementById('btn-settings-close-x').onclick = closeSettings;
+    document.getElementById('btn-settings-cancel').onclick = closeSettings;
+
+    document.getElementById('btn-settings-save').onclick = () => {
+        applySettingsToState();
+        closeSettings();
+        renderLists(); calculateEstimates();
+        toast('設定を適用しました', 'success');
+    };
+
+    document.getElementById('btn-settings-export-html').onclick = () => {
+        applySettingsToState();
+        closeSettings();
+        renderLists(); calculateEstimates();
+
+        let html = document.documentElement.outerHTML;
+        const itemsJson = JSON.stringify(ITEMS, null, 4).replace(/"/g, "'").replace(/'(.*?)':/g, '$1:');
+        const lanJson   = JSON.stringify(LAN_TYPES, null, 4).replace(/"/g, "'").replace(/'(.*?)':/g, '$1:');
+        html = html.replace(/let ITEMS = \{[\s\S]*?\n\s{8}\};/, `let ITEMS = ${itemsJson};`);
+        html = html.replace(/let LAN_TYPES = \{[\s\S]*?\n\s{8}\};/, `let LAN_TYPES = ${lanJson};`);
+        html = html.replace(/let BASE_FEE = \d+;/, `let BASE_FEE = ${BASE_FEE};`);
+        html = html.replace(/let EXTRA_FEE = \d+;/, `let EXTRA_FEE = ${EXTRA_FEE};`);
+
+        const blob = new Blob(['<!DOCTYPE html>\n<html lang="ja">\n' + html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'VAS概算見積ツールV2.0_設定保存版.html';
+        a.click(); URL.revokeObjectURL(url);
+        toast('設定をHTMLファイルとして保存しました', 'success');
+    };
+
+    // =========================================
+    // プロジェクト保存・読込
+    // =========================================
+    document.getElementById('btn-save-project').onclick = async () => {
+        const pName = document.getElementById('project-name').value || '無題';
+        const data = JSON.stringify({
+            version: '2.1',
+            name: pName,
+            pages: state.pages.map(pg => ({
+                id: pg.id, name: pg.name,
+                objects: pg.objects, lines: pg.lines,
+                scaleFactor: pg.scaleFactor, scaleLine: pg.scaleLine,
+                imgSrc: pg.img ? pg.img.src : null
+            })),
+            globalObjSize: state.globalObjSize,
+            date: new Date().toISOString()
+        });
+        const blob = new Blob([data], { type: 'application/json' });
+
+        // File System Access API（保存先ダイアログ）に対応しているブラウザはそちらを使用
+        if (window.showSaveFilePicker) {
+            try {
+                const fileHandle = await window.showSaveFilePicker({
+                    suggestedName: `VAS見積_${pName}.json`,
+                    types: [{ description: 'VAS プロジェクトファイル', accept: { 'application/json': ['.json'] } }]
+                });
+                const writable = await fileHandle.createWritable();
+                await writable.write(blob);
+                await writable.close();
+                toast('プロジェクトを保存しました', 'success');
+            } catch (err) {
+                if (err.name !== 'AbortError') toast('保存に失敗しました', 'error');
+            }
+        } else {
+            // フォールバック: 通常のダウンロード
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `VAS見積_${pName}.json`;
+            a.click(); URL.revokeObjectURL(url);
+            toast('プロジェクトを保存しました', 'success');
+        }
+    };
+
+    document.getElementById('btn-load-project').onclick = () => document.getElementById('project-file-input').click();
+    document.getElementById('project-file-input').onchange = e => {
+        const file = e.target.files[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => {
+            try {
+                const p = JSON.parse(ev.target.result);
+                document.getElementById('project-name').value = p.name || '';
+                state.globalObjSize = p.globalObjSize || 1;
+                document.getElementById('prop-size').value = state.globalObjSize;
+                state.pages = [];
+
+                // オブジェクトのプロパティ補完（欠損値に安全なデフォルトを付与）
+                const sanitizeObjects = (objs) => (objs || []).map(obj => ({
+                    id:   obj.id   || Date.now() + Math.random(),
+                    type: obj.type || 'camera1',
+                    x:    Number(obj.x)    || 0,
+                    y:    Number(obj.y)    || 0,
+                    size: Number(obj.size) || 1,
+                    rot:  Number(obj.rot)  || 0,
+                    fov:  Number(obj.fov)  || 60
+                }));
+
+                if (p.version === '2.1' && Array.isArray(p.pages) && p.pages.length > 0) {
+                    state.pages = p.pages.map(pgData => ({
+                        id: pgData.id || `page_${Date.now()}_${Math.random()}`,
+                        name: pgData.name || '無題',
+                        objects: sanitizeObjects(pgData.objects),
+                        lines: pgData.lines || [],
+                        scaleFactor: pgData.scaleFactor || 1,
+                        scalePoints: [],
+                        scaleLine: pgData.scaleLine || null,
+                        img: null,
+                        _pendingImgSrc: pgData.imgSrc || null
+                    }));
+                } else {
+                    state.pages = [{
+                        id: `page_${Date.now()}`, name: '1F',
+                        objects: sanitizeObjects(p.objects), lines: p.lines || [],
+                        scaleFactor: p.scaleFactor || 1, scalePoints: [],
+                        scaleLine: p.scaleLine || null, img: null,
+                        _pendingImgSrc: p.imgSrc || null
+                    }];
+                }
+
+                let pending = state.pages.filter(pg => pg._pendingImgSrc).length;
+                const done = () => {
+                    // 操作状態を完全リセット（ファイルダイアログ操作で残留したフラグを消去）
+                    state.interaction.isPanning  = false;
+                    state.interaction.isDragging = false;
+                    state.interaction.dragObj    = null;
+                    state.interaction.dragMode   = null;
+                    state.interaction.linePoints = [];
+                    state.interaction.selectedObj  = null;
+                    state.interaction.selectedLine = null;
+                    state.interaction.mousePos     = null;
+
+                    state.currentPageIndex = 0;
+                    state.history = [];
+                    state.redoHistory = [];
+                    state.mode = 'select';
+                    updateModeUI();
+
+                    // カンバスサイズを再確定してから描画
+                    resize();
+                    updatePageTabs();
+                    switchPage(0);
+                    saveHistory();
+                    toast('プロジェクトを読み込みました', 'success');
+                };
+                if (pending === 0) { done(); return; }
+                state.pages.forEach(pg => {
+                    if (pg._pendingImgSrc) {
+                        const img = new Image();
+                        img.onload = () => { pg.img = img; delete pg._pendingImgSrc; if (--pending === 0) done(); };
+                        img.onerror = () => { delete pg._pendingImgSrc; if (--pending === 0) done(); };
+                        img.src = pg._pendingImgSrc;
+                    }
+                });
+            } catch (err) {
+                toast('ファイルの読み込みに失敗しました', 'error');
+                console.error(err);
+            }
+            e.target.value = '';
+        };
+        reader.readAsText(file);
+    };
+
+    // =========================================
+    // PDF出力
+    // =========================================
+    document.getElementById('btn-export-pdf-client').onclick = () => exportPdf(false);
+    document.getElementById('btn-export-pdf-internal').onclick = () => exportPdf(true);
+
+    /**
+     * PDF用ビューフィット：指定ページの図面全体がキャンバスに収まるようビューを調整する。
+     * キャンバス全域（サイドバー等のUI要素は無視）を使って最大表示する。
+     */
+    function fitViewForPrint(pg) {
+        if (pg.img) {
+            const pad = 24; // 四辺の余白(px)
+            const scaleX = (canvas.width  - pad * 2) / pg.img.width;
+            const scaleY = (canvas.height - pad * 2) / pg.img.height;
+            state.view.zoom = Math.min(scaleX, scaleY);
+            state.view.x = (canvas.width  - pg.img.width  * state.view.zoom) / 2;
+            state.view.y = (canvas.height - pg.img.height * state.view.zoom) / 2;
+        } else {
+            // 図面なし: オブジェクト・配線の範囲にフィット（なければデフォルト）
+            const allPts = [];
+            pg.objects.forEach(o => allPts.push({ x: o.x, y: o.y }));
+            pg.lines.forEach(l => l.points.forEach(p => allPts.push(p)));
+            if (allPts.length > 0) {
+                const xs = allPts.map(p => p.x), ys = allPts.map(p => p.y);
+                const minX = Math.min(...xs), maxX = Math.max(...xs);
+                const minY = Math.min(...ys), maxY = Math.max(...ys);
+                const w = Math.max(maxX - minX, 1), h = Math.max(maxY - minY, 1);
+                const pad = 60;
+                const zoom = Math.min((canvas.width - pad*2) / w, (canvas.height - pad*2) / h, 3);
+                state.view.zoom = zoom;
+                state.view.x = (canvas.width  - w * zoom) / 2 - minX * zoom;
+                state.view.y = (canvas.height - h * zoom) / 2 - minY * zoom;
+            } else {
+                state.view = { x: 0, y: 0, zoom: 1 };
+            }
+        }
+    }
+
+    async function exportPdf(isInternal) {
+        const container = document.getElementById('print-dynamic-container');
+        container.innerHTML = '';
+
+        const header = document.createElement('div');
+        header.id = 'print-header';
+        header.innerText = isInternal ? '概算見積書（社内用明細）' : '概算見積書';
+        container.appendChild(header);
+
+        const template = document.querySelector('.print-summary-template');
+        const pName   = document.getElementById('project-name').value || '未入力';
+        const today   = new Date();
+        const dateStr = `${today.getFullYear()}年${today.getMonth()+1}月${today.getDate()}日`;
+        const origIdx = state.currentPageIndex;
+        // キャプチャ前のビューも保存して後で戻す
+        const origView = { ...state.view };
+
+        // 明細テーブル生成
+        const createDetailsTable = () => {
+            const dt = document.createElement('table');
+            dt.className = 'print-table'; dt.style.marginTop = '18px';
+            dt.innerHTML = `<thead><tr style="background:#e2e8f0;">
+                <th style="width:40%;">項目</th><th style="width:20%;">単価</th>
+                <th style="width:20%;">数量</th><th style="width:20%;">小計</th>
+            </tr></thead><tbody></tbody>`;
+            const tbd = dt.querySelector('tbody');
+            let counts = {}, lineLen = {};
+            state.pages.forEach(pg => {
+                pg.objects.forEach(o => counts[o.type] = (counts[o.type] || 0) + 1);
+                pg.lines.forEach(l => {
+                    let px = 0;
+                    for (let i = 0; i < l.points.length - 1; i++) {
+                        const dx = l.points[i+1].x - l.points[i].x;
+                        const dy = l.points[i+1].y - l.points[i].y;
+                        px += Math.sqrt(dx*dx + dy*dy);
+                    }
+                    lineLen[l.type] = (lineLen[l.type] || 0) + (px * pg.scaleFactor);
+                });
+            });
+            tbd.innerHTML += `<tr><td style="text-align:left;">基本料金</td><td style="text-align:right;">¥${BASE_FEE.toLocaleString()}</td><td style="text-align:right;">1式</td><td style="text-align:right;font-weight:bold;">¥${BASE_FEE.toLocaleString()}</td></tr>`;
+            Object.keys(counts).forEach(k => {
+                const item = ITEMS[k]; const sub = item.price * counts[k];
+                tbd.innerHTML += `<tr><td style="text-align:left;">${item.name}</td><td style="text-align:right;">¥${item.price.toLocaleString()}/台</td><td style="text-align:right;">${counts[k]}台</td><td style="text-align:right;font-weight:bold;">¥${sub.toLocaleString()}</td></tr>`;
+            });
+            Object.keys(lineLen).forEach(k => {
+                const lnt = LAN_TYPES[k]; const len = lineLen[k]; const sub = len * lnt.price;
+                tbd.innerHTML += `<tr><td style="text-align:left;">${lnt.name}</td><td style="text-align:right;">¥${lnt.price.toLocaleString()}/m</td><td style="text-align:right;">${len.toFixed(1)}m</td><td style="text-align:right;font-weight:bold;">¥${Math.round(sub).toLocaleString()}</td></tr>`;
+            });
+            return dt;
+        };
+
+        // 概算サマリー clone
+        const buildSummaryClone = (allEstimates, suffix = '') => {
+            const clone = template.cloneNode(true);
+            clone.querySelector('.pd-date').innerText = dateStr;
+            clone.querySelector('.pd-pname').innerText = pName;
+            clone.querySelector('.pd-camera-count').innerText = `${allEstimates.cameraCount}台${suffix}`;
+            clone.querySelector('.pd-other-count').innerText = `${allEstimates.otherCount}台${suffix}`;
+            clone.querySelector('.pd-lan-length').innerText = `${allEstimates.lanLenTotal.toFixed(1)}m${suffix}`;
+            clone.querySelector('.pd-total').innerText = `¥${Math.round(allEstimates.total).toLocaleString()}`;
+            return clone;
+        };
+
+        /**
+         * 1フロア分の印刷ページDIVを生成して返す。
+         * hasSummary=true なら見積サマリーと明細テーブルも付ける（1Fページ用）。
+         */
+        const buildFloorPageDiv = async (pgIndex, titleText, hasSummary, allEstimates, summaryFloorSuffix) => {
+            state.currentPageIndex = pgIndex;
+            fitViewForPrint(state.pages[pgIndex]); // ← 図面全体がキャンバスに収まるよう調整
+            render();
+            await new Promise(r => setTimeout(r, 80)); // レンダリング完了を待つ
+
+            const pDiv = document.createElement('div');
+            pDiv.className = hasSummary ? 'print-page' : 'print-page floor-only';
+
+            const pTitle = document.createElement('h2');
+            pTitle.style.cssText = 'color:#1e40af;margin-bottom:6px;font-size:16px;border-bottom:2px solid #1e40af;padding-bottom:4px;';
+            pTitle.innerText = titleText;
+            pDiv.appendChild(pTitle);
+
+            const imgNode = document.createElement('img');
+            imgNode.src = canvas.toDataURL('image/png');
+            imgNode.className = 'print-canvas-img';
+            pDiv.appendChild(imgNode);
+
+            if (hasSummary) {
+                pDiv.appendChild(buildSummaryClone(allEstimates, summaryFloorSuffix));
+                if (isInternal) pDiv.appendChild(createDetailsTable());
+            }
+
+            return pDiv;
+        };
+
+        const allEstimates = calculateAllEstimates();
+        const multiFloor   = state.pages.length > 1;
+
+        // 1フロア目（常に概算サマリー付き）
+        const title1 = multiFloor
+            ? `フロア: ${state.pages[0].name}（全${state.pages.length}フロア構成）`
+            : `フロア: ${state.pages[0].name}`;
+        const suffix1 = multiFloor ? '（全フロア合計）' : '';
+        container.appendChild(
+            await buildFloorPageDiv(0, title1, true, allEstimates, suffix1)
+        );
+
+        // 2フロア以降は各フロアを1ページずつ（概算なし、図面最大化）
+        for (let i = 1; i < state.pages.length; i++) {
+            container.appendChild(
+                await buildFloorPageDiv(i, `フロア: ${state.pages[i].name}`, false, null, '')
+            );
+        }
+
+        // ビューを元に戻す
+        state.currentPageIndex = origIdx;
+        state.view = origView;
+        render();
+
+        setTimeout(() => window.print(), 500);
+    }
+
+    // 全リセット
+    document.getElementById('btn-clear-all').onclick = () => {
+        if (!confirm('データと全図面を完全にリセットしますか？この操作は元に戻せません。')) return;
+        document.getElementById('project-name').value = '';
+        state.pages = [{ id: 'page_1', name: '1F', img: null, objects: [], lines: [], scaleFactor: 1, scalePoints: [], scaleLine: null }];
+        state.currentPageIndex = 0; state.history = []; state.redoHistory = [];
+        state.globalObjSize = 1; document.getElementById('prop-size').value = 1;
+        updatePageTabs(); switchPage(0);
+        toast('全てリセットしました', 'info');
+    };
+
+    // =========================================
+    // 初期化
+    // =========================================
+    updatePageTabs();
+    updateModeUI();
+    resize();
+});
+</script>
+</body>
+</html>
