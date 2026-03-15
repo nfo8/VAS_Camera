@@ -842,6 +842,10 @@
                 <div class="input-group" style="margin-bottom:8px;">
                     <label class="input-label">回転角度</label>
                     <input type="range" id="prop-rot" min="-180" max="180" value="0" class="form-control" style="padding:0;height:4px;accent-color:var(--primary);">
+                    <div style="display:flex;gap:6px;margin-top:6px;">
+                        <button class="btn" id="btn-rot-ccw" style="flex:1;font-size:1rem;padding:6px 0;">↺ -45°</button>
+                        <button class="btn" id="btn-rot-cw"  style="flex:1;font-size:1rem;padding:6px 0;">↻ +45°</button>
+                    </div>
                 </div>
             </div>
             <button class="btn btn-danger" id="btn-delete-obj" style="width:100%;margin-top:4px;">🗑 削除 (Delete)</button>
@@ -850,7 +854,7 @@
         <!-- 操作ガイド -->
         <div class="info-box" style="font-size:0.72rem;">
             <span>💡</span>
-            <span>機器はドラッグで移動。選択後、<b>青ハンドル</b>で回転・<b>緑ハンドル</b>で視野角を調整。配線はタップで頂点追加、ダブルタップ/右クリックで確定。<br><b>Del</b>=削除　<b>Esc</b>=選択解除</span>
+            <span>機器はドラッグで移動。選択後、<b>青ハンドル</b>で回転・<b>緑ハンドル</b>で視野角を調整。配線はタップで頂点追加、<b>ダブルタップ</b>で確定。<br>iPad: <b>2本指ピンチ</b>=ズーム　<b>↺↻ボタン</b>=回転　<b>Del</b>=削除　<b>Esc</b>=選択解除</span>
         </div>
     </div>
 </aside>
@@ -875,7 +879,7 @@
                 図面アップロード
             </div>
             <button class="upload-btn" id="img-upload-zone">🖼️ 図面を選択 / 📷 iPadで撮影</button>
-            <input type="file" id="file-input" accept="image/*" capture="environment" style="display:none;">
+            <input type="file" id="file-input" accept="image/*" style="display:none;">
         </div>
 
         <!-- スケール設定 -->
@@ -1077,7 +1081,8 @@ document.addEventListener('DOMContentLoaded', () => {
             isPanning: false, panStart: { x: 0, y: 0 },
             linePoints: [], hoverObj: null,
             selectedObj: null, selectedLine: null, mousePos: null,
-            lastTouchStart: 0, lastTapTime: 0
+            lastTouchStart: 0, lastTapTime: 0,
+            pinchState: null
         }
     };
 
@@ -1438,8 +1443,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const evtInfo = getEventPoint(e);
         if (e.type === 'touchstart' && e.touches.length === 2) {
-            state.interaction.isPanning = true;
-            state.interaction.panStart = { x: evtInfo.clientX, y: evtInfo.clientY };
+            const t0 = e.touches[0], t1 = e.touches[1];
+            const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+            const midX = (t0.clientX + t1.clientX) / 2;
+            const midY = (t0.clientY + t1.clientY) / 2;
+            state.interaction.pinchState = {
+                dist, midX, midY,
+                zoom: state.view.zoom,
+                viewX: state.view.x, viewY: state.view.y
+            };
+            state.interaction.isPanning = false;
+            state.interaction.isDragging = false;
             return;
         }
 
@@ -1615,6 +1629,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handlePointerMove(e) {
         if (e.type === 'touchmove') e.preventDefault();
+
+        // ピンチズーム（2本指）
+        if (e.type === 'touchmove' && e.touches.length === 2 && state.interaction.pinchState) {
+            const t0 = e.touches[0], t1 = e.touches[1];
+            const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+            const midX = (t0.clientX + t1.clientX) / 2;
+            const midY = (t0.clientY + t1.clientY) / 2;
+            const ps = state.interaction.pinchState;
+            const newZoom = Math.max(0.1, Math.min(ps.zoom * (dist / ps.dist), 5));
+            const rect = canvas.getBoundingClientRect();
+            const cx = midX - rect.left;
+            const cy = midY - rect.top;
+            // ズームはピンチ中点を基準に拡縮、さらに中点移動分だけパン
+            state.view.zoom = newZoom;
+            state.view.x = cx - (cx - ps.viewX) * (newZoom / ps.zoom) + (midX - ps.midX);
+            state.view.y = cy - (cy - ps.viewY) * (newZoom / ps.zoom) + (midY - ps.midY);
+            render(); return;
+        }
+
         const evtInfo = getEventPoint(e);
         if (!evtInfo) return;
         const p = getCanvasPoint(evtInfo);
@@ -1662,6 +1695,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handlePointerUp() {
+        state.interaction.pinchState = null;
         if (state.interaction.isPanning) state.interaction.isPanning = false;
         if (state.interaction.dragMode) { state.interaction.dragMode = null; calculateEstimates(); render(); }
         if (state.interaction.isDragging) { state.interaction.isDragging = false; calculateEstimates(); render(); }
@@ -1848,6 +1882,18 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     document.getElementById('prop-fov').oninput = e => {
         if (state.interaction.selectedObj) { state.interaction.selectedObj.fov = Math.round(parseFloat(e.target.value)); render(); }
+    };
+    document.getElementById('btn-rot-ccw').onclick = () => {
+        if (!state.interaction.selectedObj) return;
+        saveHistory();
+        state.interaction.selectedObj.rot -= Math.PI / 4;
+        updatePropertyPanel(); render();
+    };
+    document.getElementById('btn-rot-cw').onclick = () => {
+        if (!state.interaction.selectedObj) return;
+        saveHistory();
+        state.interaction.selectedObj.rot += Math.PI / 4;
+        updatePropertyPanel(); render();
     };
     document.getElementById('btn-delete-obj').onclick = () => {
         const pg = getPage();
