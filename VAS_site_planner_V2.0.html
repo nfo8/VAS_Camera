@@ -1594,6 +1594,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     toast('配線を確定しました', 'success');
                 } else {
                     state.interaction.linePoints.push(p);
+                    // 最初の点を置いた瞬間はmousePosを同じ点にリセット
+                    // （タッチ操作では古いmousePosが残るためプレビュー線が変な位置から伸びる問題を防ぐ）
+                    if (state.interaction.linePoints.length === 1) {
+                        state.interaction.mousePos = p;
+                    }
                 }
             } else if (evtInfo.button === 2 && state.interaction.linePoints.length > 1) {
                 saveHistory();
