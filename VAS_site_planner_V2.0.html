@@ -733,6 +733,28 @@
             .app-name { font-size: 0.85rem; }
             .btn { font-size: 0.75rem; padding: 6px 11px; }
         }
+        /* iPad横向き (〜1180px) */
+        @media (max-width: 1180px) {
+            :root { --sidebar-width: 230px; }
+            .app-version { display: none; }
+            .mode-indicator { min-width: 100px; font-size: 0.7rem; padding: 4px 10px; }
+            .top-actions { gap: 4px; }
+            .btn { font-size: 0.72rem; padding: 5px 9px; }
+        }
+        /* iPad縦向き (〜900px) */
+        @media (max-width: 900px) {
+            :root { --sidebar-width: 190px; --header-height: 50px; }
+            .app-logo { width: 28px; height: 28px; font-size: 14px; border-radius: 8px; }
+            .app-name { font-size: 0.75rem; }
+            .app-version { display: none; }
+            .mode-indicator { display: none; }
+            .top-bar { gap: 5px; padding: 0 10px; }
+            .top-actions { gap: 3px; }
+            .btn { font-size: 0.68rem; padding: 5px 7px; }
+            .btn.btn-icon { padding: 5px 9px; font-size: 1rem; }
+            /* 幅節約のためテキストラベルを非表示にしてアイコンのみ表示 */
+            .btn-label { display: none; }
+        }
 
         /* アニメーション */
         @keyframes fadeSlideIn {
@@ -772,12 +794,12 @@
         <button class="btn btn-icon" id="btn-undo" title="元に戻す (Ctrl+Z)">↶</button>
         <button class="btn btn-icon" id="btn-redo" title="やり直し (Ctrl+Y)">↷</button>
         <button class="btn btn-icon" id="btn-reset-view" title="表示をリセット">⊙</button>
-        <button class="btn btn-outline" id="btn-select-line">✏️ 配線選択</button>
-        <button class="btn btn-outline" id="btn-help">❓ 使い方</button>
-        <button class="btn btn-outline" id="btn-settings">⚙️ 設定</button>
-        <button class="btn btn-outline" id="btn-load-project">📂 読込</button>
+        <button class="btn btn-outline" id="btn-select-line">✏️ <span class="btn-label">配線選択</span></button>
+        <button class="btn btn-outline" id="btn-help">❓ <span class="btn-label">使い方</span></button>
+        <button class="btn btn-outline" id="btn-settings">⚙️ <span class="btn-label">設定</span></button>
+        <button class="btn btn-outline" id="btn-load-project">📂 <span class="btn-label">読込</span></button>
         <input type="file" id="project-file-input" accept=".json" style="display:none;">
-        <button class="btn btn-primary" id="btn-save-project">💾 保存</button>
+        <button class="btn btn-primary" id="btn-save-project">💾 <span class="btn-label">保存</span></button>
     </div>
 </header>
 
