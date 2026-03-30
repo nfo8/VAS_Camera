@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git push:*)",
+      "Bash(git config:*)",
+      "Bash(claude --version)",
+      "Bash(npm --version)",
+      "Bash(powershell -Command \"echo $PROFILE\")",
+      "Bash(powershell -Command \"Write-Output $PROFILE\")"
+    ]
+  }
+}

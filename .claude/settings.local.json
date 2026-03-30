@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(grep -v \"^\\\\s*//\")",
+      "Bash(grep -v \"showPrompt\\\\|showConfirm\\\\|prompt-modal\\\\|confirm-modal\\\\|//.*prompt\\\\|//.*confirm\")",
+      "Bash(git tag:*)",
+      "WebSearch",
+      "Bash(curl -s https://www.bing.com/search?q=SharePoint+Online+Content+Security+Policy+enforcement+March+2026+site%3Atechcommunity.microsoft.com+OR+site%3Alearn.microsoft.com -H \"User-Agent: Mozilla/5.0 \\(Windows NT 10.0; Win64; x64\\) AppleWebKit/537.36\")",
+      "Bash(curl -s https://www.bing.com/search?q=SharePoint+Online+CSP+enforcement+dates+2026+report-only+mode -H \"User-Agent: Mozilla/5.0 \\(Windows NT 10.0; Win64; x64\\) AppleWebKit/537.36\")",
+      "WebFetch(domain:techcommunity.microsoft.com)",
+      "WebFetch(domain:mc.merill.net)",
+      "WebFetch(domain:global-sharepoint.com)",
+      "Bash(git rm:*)"
+    ]
+  }
+}

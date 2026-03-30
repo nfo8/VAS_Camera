@@ -1500,6 +1500,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     pg.scaleFactor = Number(dist) / Math.sqrt(dx*dx + dy*dy);
                     pg.scaleLine = { p1: pg.scalePoints[0], p2: pg.scalePoints[1], m: dist };
                     toast('縮尺を設定しました', 'success');
+                    calculateEstimates();
                 }
                 pg.scalePoints = [];
                 state.mode = 'select';
@@ -1708,13 +1709,56 @@ document.addEventListener('DOMContentLoaded', () => {
         if (state.mode === 'add_line' && state.interaction.linePoints.length > 0) render();
 
         // カーソル
-        let cursor = 'crosshair';
-        if (state.interaction.isPanning || state.interaction.dragMode) cursor = 'grabbing';
-        else if (state.mode === 'select' && state.interaction.selectedObj) {
-            const obj = state.interaction.selectedObj;
-            const size = 15 * obj.size / state.view.zoom;
-            cursor = (p.x >= obj.x - size - 5/state.view.zoom && p.x <= obj.x + size + 5/state.view.zoom &&
-                      p.y >= obj.y - size - 5/state.view.zoom && p.y <= obj.y + size + 5/state.view.zoom) ? 'grab' : 'crosshair';
+        let cursor = 'default';
+        if (state.interaction.isPanning || state.interaction.dragMode || state.interaction.isDragging) {
+            cursor = 'grabbing';
+        } else if (state.mode === 'add_obj' || state.mode === 'add_line' || state.mode === 'scale') {
+            cursor = 'crosshair';
+        } else if (state.mode === 'select' || state.mode === 'select_line') {
+            const pg = getPage();
+            // オブジェクト上にいるか判定
+            let onObj = false;
+            if (state.mode !== 'select_line') {
+                for (let i = pg.objects.length - 1; i >= 0; i--) {
+                    const obj = pg.objects[i];
+                    if (Math.hypot(obj.x - p.x, obj.y - p.y) < 20 * obj.size / state.view.zoom) { onObj = true; break; }
+                }
+            }
+            if (onObj) {
+                cursor = 'pointer';
+            } else {
+                // 配線上にいるか判定
+                const tol = 14 / state.view.zoom;
+                let onLine = false;
+                outer2: for (let i = pg.lines.length - 1; i >= 0; i--) {
+                    const line = pg.lines[i];
+                    for (let j = 0; j < line.points.length - 1; j++) {
+                        const p1 = line.points[j], p2 = line.points[j+1];
+                        const l2 = (p2.x-p1.x)**2 + (p2.y-p1.y)**2;
+                        if (l2 === 0) continue;
+                        const t = Math.max(0, Math.min(1, ((p.x-p1.x)*(p2.x-p1.x) + (p.y-p1.y)*(p2.y-p1.y)) / l2));
+                        const proj = { x: p1.x + t*(p2.x-p1.x), y: p1.y + t*(p2.y-p1.y) };
+                        if (Math.hypot(p.x - proj.x, p.y - proj.y) < tol) { onLine = true; break outer2; }
+                    }
+                }
+                cursor = onLine ? 'pointer' : 'default';
+            }
+            // 選択中オブジェクトのハンドル上は grab
+            if (state.interaction.selectedObj && ITEMS[state.interaction.selectedObj.type]?.isCamera) {
+                const obj = state.interaction.selectedObj;
+                const rRadius = 100 * obj.size / state.view.zoom;
+                const hr = 12 / state.view.zoom;
+                const rx = obj.x + Math.cos(obj.rot) * rRadius;
+                const ry = obj.y + Math.sin(obj.rot) * rRadius;
+                const fovRad = obj.fov * Math.PI / 180;
+                const fx  = obj.x + Math.cos(obj.rot + fovRad/2) * rRadius;
+                const fy  = obj.y + Math.sin(obj.rot + fovRad/2) * rRadius;
+                const fx2 = obj.x + Math.cos(obj.rot - fovRad/2) * rRadius;
+                const fy2 = obj.y + Math.sin(obj.rot - fovRad/2) * rRadius;
+                if (Math.hypot(rx - p.x, ry - p.y) < hr ||
+                    Math.hypot(fx - p.x, fy - p.y) < hr ||
+                    Math.hypot(fx2 - p.x, fy2 - p.y) < hr) cursor = 'grab';
+            }
         }
         canvas.style.cursor = cursor;
     }
